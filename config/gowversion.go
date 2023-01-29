@@ -8,12 +8,14 @@ const (
 	GOWunknown = iota
 	GOW1
 	GOW2
+	GOW3
 	GOW2018 = 2018
 )
 
 const (
 	PS2 = iota
 	PS3
+	PS4
 	PSVita
 	PC
 )
@@ -36,6 +38,7 @@ func SetGOWVersion(v GOWVersion) {
 	case GOWunknown:
 	case GOW1:
 	case GOW2:
+   	case GOW3:
 	case GOW2018:
 	}
 	godOfWarVersion = v
