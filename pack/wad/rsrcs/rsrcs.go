@@ -10,6 +10,7 @@ import (
 )
 
 const RSRCS_Tag = 500
+const RSRCS_Tag = 018
 
 type RSRCS struct {
 	Wads []string
