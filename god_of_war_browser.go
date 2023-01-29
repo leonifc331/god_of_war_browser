@@ -52,10 +52,10 @@ func main() {
 	flag.StringVar(&dirpath, "dir", "", "Path to unpacked wads and other stuff")
 	flag.StringVar(&isopath, "iso", "", "Path to iso file")
 	flag.StringVar(&psarcpath, "psarc", "", "Path to ps3 psarc file")
-	flag.StringVar(&psversion, "ps", "ps2", "Playstation version (ps2, ps3, psvita, pc)")
-	flag.IntVar(&gowversion, "gowversion", 0, "0 - auto, 1 - 'gow1', 2 - 'gow2', 2018 - 'gow2018'")
-	flag.BoolVar(&parsecheck, "parsecheck", false, "Check every file for parse errors (for devs)")
-	flag.BoolVar(&listencodings, "listencodings", false, "List text encodings")
+	flag.StringVar(&psversion, "ps", "ps2", "Playstation version (ps2, ps3, ps4, psvita, pc)")
+	flag.IntVar(&gowversion, "gowversion", 0, "0 - auto, 1 - 'gow1', 2 - 'gow2', 3 - 'gow3', 2018 - 'gow2018'")
+	flag.BoolVar(&parsecheck, "parsecheck", true, "Check every file for parse errors (for devs)")
+	flag.BoolVar(&listencodings, "listencodings", true, "List text encodings")
 	flag.StringVar(&encoding, "encoding", "Windows 1252", "Select text encodings")
 	flag.Parse()
 
@@ -81,19 +81,21 @@ func main() {
 		config.SetPlayStationVersion(config.PS2)
 	case "ps3":
 		config.SetPlayStationVersion(config.PS3)
+	case "ps4":
+		config.SetPlayStationVersion(config.PS4)
 	case "psvita":
 		config.SetPlayStationVersion(config.PSVita)
 	case "pc":
 		config.SetPlayStationVersion(config.PC)
 	default:
-		log.Fatalf("Provide correct 'ps' parameter (ps2, ps3, psvita)")
+		log.Fatalf("Provide correct 'ps' parameter (ps2, ps3, ps4, psvita)")
 	}
 
 	config.SetGOWVersion(config.GOWVersion(gowversion))
 
 	if psarcpath != "" {
 		if config.GetPlayStationVersion() != config.PS3 && config.GetPlayStationVersion() != config.PSVita {
-			log.Fatalf("Cannot use psarcpath when 'ps' is not ps3 or psvita")
+			log.Fatalf("Cannot use psarcpath when 'ps' is not ps3, ps4 or psvita")
 		}
 		f := vfs.NewDirectoryDriverFile(psarcpath)
 		if err = f.Open(true); err == nil {
