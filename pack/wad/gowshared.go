@@ -23,8 +23,6 @@ func isZeroSizedTag(tag *Tag) bool {
 		return tag.Tag == TAG_GOW1_ENTITY_COUNT
 	case config.GOW2:
 		return tag.Tag == TAG_GOW2_ENTITY_COUNT
-	case config.GOW3:
-		return tag.Tag == TAG_GOW3_ENTITY_COUNT
 	case config.GOW2018:
 		return false
 	default:
