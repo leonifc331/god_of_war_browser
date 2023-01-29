@@ -6,9 +6,11 @@ import (
 
 const (
 	GOWunknown = iota
-	GOW1
-	GOW2
+	GodOfWar1
+	GodOfWar2
 	GOW3
+	GodOfWarGhostOfSparta
+	GodOfWarChainsOfOlympus
 	GOW2018 = 2018
 )
 
@@ -36,9 +38,11 @@ func SetGOWVersion(v GOWVersion) {
 	default:
 		log.Panicf("Versão desconhecida '%v'", v)
 	case GOWunknown:
-	case GOW1:
-	case GOW2:
+	case GodOfWar1:
+	case GodOfWar2:
    	case GOW3:
+	case GodOfWarGhostOfSparta:
+	case GodOfWarChainsOfOlympus:
 	case GOW2018:
 	}
 	godOfWarVersion = v
