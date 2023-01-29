@@ -59,7 +59,7 @@ func (f *File) initBuf() error {
 			} else {
 				// TODO: improve something here pls
 				if compressedBlock[0] != 0x78 || compressedBlock[1] != 0xda {
-					panic(fmt.Sprintf("incorrect compression header: 0x%x 0x%x 0x%x 0x%x",
+					panic(fmt.Sprintf("Compressão do cabeçalho incorreta: 0x%x 0x%x 0x%x 0x%x",
 						compressedBlock[0], compressedBlock[1], compressedBlock[2], compressedBlock[3]))
 				}
 
@@ -78,7 +78,7 @@ func (f *File) initBuf() error {
 		blockIndex++
 	}
 	if int64(buf.Len()) != f.e.OriginalSize {
-		return fmt.Errorf("File sizes not equals: %v != %v", buf.Len(), f.e.OriginalSize)
+		return fmt.Errorf("Tamanhos de arquivo diferentes: %v != %v", buf.Len(), f.e.OriginalSize)
 	}
 	f.buf = buf
 	return nil
@@ -93,7 +93,7 @@ func (f *File) IsDirectory() bool         { return false }
 func (f *File) Size() int64 { return f.e.OriginalSize }
 func (f *File) Open(readonly bool) error {
 	if readonly != true {
-		return fmt.Errorf("[psarc.File.Open] write not supported")
+		return fmt.Errorf("[psarc.File.Open] gravação não suportada")
 	}
 	if f.buf == nil {
 		return f.initBuf()
@@ -112,8 +112,8 @@ func (f *File) ReadAt(b []byte, off int64) (n int, err error) {
 	return copy(b, f.buf.Bytes()[off:]), nil
 }
 func (f *File) Copy(src io.Reader) error {
-	return errors.Errorf("PSARC read-only")
+	return errors.Errorf("PSARC Somente Leitura")
 }
 func (f *File) WriteAt(b []byte, off int64) (n int, err error) {
-	return 0, errors.Errorf("PSARC read-only")
+	return 0, errors.Errorf("PSARC Somente Leitura")
 }
