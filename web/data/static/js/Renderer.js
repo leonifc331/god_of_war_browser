@@ -551,7 +551,7 @@ class RenderController extends ObjectTreeNode {
         this.movingForward = false;
         this.movingBackwards = false;
 
-        let eventWithShift = false;
+        let eventWithShift = true;
         canvas.mousewheel(function(event) {
             gr_instance.camera.onMouseWheel(event.deltaY * event.deltaFactor);
             event.stopPropagation();
@@ -744,7 +744,7 @@ class RenderController extends ObjectTreeNode {
         return shaderProgram;
     }
     downloadShader(link, isFragment) {
-        let text = this.downloadFile(link, false);
+        let text = this.downloadFile(link, true);
         if (text)
             return this.createShader(text, isFragment);
     }
