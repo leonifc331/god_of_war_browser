@@ -8,19 +8,8 @@ const (
 	TAG_GOW3_FILE_GROUP_START = 2
 	TAG_GOW3_FILE_GROUP_END   = 3
 
-	TAG_GOW3_HEADER_START = 21
-	TAG_GOW3_HEADER_POP   = 19
-
-	TAG_GOW3_TT_6 = 6
-	TAG_GOW3_TT_7 = 7
-	TAG_GOW3_TT_9 = 9
-	TAG_GOW3_TT_11 = 11
-	TAG_GOW3_TT_12 = 12
-	TAG_GOW3_TT_13 = 13
-	TAG_GOW3_TT_14 = 14
-	TAG_GOW3_TT_15 = 15
-	TAG_GOW3_TT_16 = 16
-	TAG_GOW3_TT_18 = 18
+	TAG_GOW3_HEADER_START = 19
+	TAG_GOW3_HEADER_POP   = 22
 )
 
 func (w *Wad) gow3parseTag(tag *Tag, currentNode *NodeId, newGroupTag *bool, addNode func(tag *Tag) *Node) error {
@@ -46,21 +35,6 @@ func (w *Wad) gow3parseTag(tag *Tag, currentNode *NodeId, newGroupTag *bool, add
 		} else {
 			*newGroupTag = false
 		}
-	case TAG_GOW3_TT_11, TAG_GOW3_TT_12, TAG_GOW3_TT_13, TAG_GOW3_TT_14, TAG_GOW3_TT_15, TAG_GOW3_TT_16, TAG_GOW3_TT_18,TAG_GOW3_TT_6, TAG_GOW3_TT_7, TAG_GOW3_TT_9:
-		/*
-			tag11:
-				unk 4 bytes (32 CB 08 4A)
-			tag12:
-				tweak templates
-			tag13:
-				map string to tweat template offset? names of tweak templates?
-			tag14:
-				map string to tewak ttemplate offset? or import/export templates? idk
-			tag15:
-				map hash to string
-			tag16:
-				description of some fields in tweak template?
-		*/
 		addNode(tag)
 	case TAG_GOW3_HEADER_START:
 		addNode(tag)
@@ -68,3 +42,4 @@ func (w *Wad) gow3parseTag(tag *Tag, currentNode *NodeId, newGroupTag *bool, add
 		// return fmt.Errorf("unknown tag id%.4x-tag%.4x-%s offset 0x%.6x", tag.Id, tag.Tag, tag.Name, tag.DebugPos)
 	}
 	return nil
+}
