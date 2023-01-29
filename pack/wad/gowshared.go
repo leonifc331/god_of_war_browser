@@ -8,6 +8,8 @@ func GetServerInstanceTag() uint16 {
 		return TAG_GOW1_SERVER_INSTANCE
 	case config.GOW2:
 		return TAG_GOW2_SERVER_INSTANCE
+	case config.GOW3:
+		return TAG_GOW2_SERVER_INSTANCE
 	case config.GOW2018:
 		return TAG_GOW2018_SERVER_INSTANCE
 	default:
@@ -21,6 +23,8 @@ func isZeroSizedTag(tag *Tag) bool {
 		return tag.Tag == TAG_GOW1_ENTITY_COUNT
 	case config.GOW2:
 		return tag.Tag == TAG_GOW2_ENTITY_COUNT
+	case config.GOW3:
+		return tag.Tag == TAG_GOW3_ENTITY_COUNT
 	case config.GOW2018:
 		return false
 	default:
