@@ -63,7 +63,7 @@ function treeLoadWadAsNodes(wadName, data) {
         let node_id = parseInt(node_element.attr('nodeid'));
         console.log(node_id);
         if (node_id !== 0) {
-            gw_cxt_group_loading = false;
+            gw_cxt_group_loading = true;
             treeLoadWadNode(wadName, node_id);
         } else {
             dataSummary.empty();
@@ -1430,10 +1430,10 @@ function summaryLoadWadCxt(data, wad, nodeid) {
         dataSummary.empty();
 
         let dumplinkgltf = getActionLinkForWadNode(wad, nodeid, 'gltf');
-        dataSummary.append($('<a class="center">').attr('href', dumplinkgltf).append('Download .glb bin glTF 2.0'));
+        dataSummary.append($('<a class="center">').attr('href', dumplinkgltf).append('Baixar Modelo .glb bin glTF 2.0'));
     } else {
         let dumplinkgltf = getActionLinkForWadNode(wad, nodeid, 'gltf_all');
-        dataSummary.append($('<a class="center">').attr('href', dumplinkgltf).append('Download .glb bin glTF 2.0'));
+        dataSummary.append($('<a class="center">').attr('href', dumplinkgltf).append('Baixar Modelo .glb bin glTF 2.0'));
     }
 
     if ((data.Instances !== null && data.Instances.length) || gw_cxt_group_loading) {
@@ -1689,12 +1689,12 @@ function summaryLoadWadTWK(data, wad, nodeid) {
     info.append($("<li>").append("Name: " + twk.Name));
     info.append($("<li>").append("MagicHeaderPresened: " + twk.MagicHeaderPresened));
     info.append($("<li>").append("HeaderStrangeMagicUid: " + twk.HeaderStrangeMagicUid));
-    info.append($("<li>").append($("<a>").attr('href', dumpYamlLink).append("Download yaml")));
+    info.append($("<li>").append($("<a>").attr('href', dumpYamlLink).append("Baixar arquivo como .yaml")));
     dataSummary.append(info);
 
     let form = $('<form action="' + getActionLinkForWadNode(wad, nodeid, 'fromyaml') + '" method="post" enctype="multipart/form-data">');
     form.append($('<input type="file" name="data">'));
-    let replaceBtn = $('<input type="button" value="Upload from yaml">')
+    let replaceBtn = $('<input type="button" value="Carregar arquivo yaml">')
     replaceBtn.click(function() {
         let form = $(this).parent();
         $.ajax({
