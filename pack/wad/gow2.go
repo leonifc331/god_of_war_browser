@@ -11,6 +11,9 @@ const (
 	TAG_GOW2_HEADER_START = 21
 	TAG_GOW2_HEADER_POP   = 19
 
+	TAG_GOW2_TT_6 = 6
+	TAG_GOW2_TT_7 = 7
+	TAG_GOW2_TT_9 = 9
 	TAG_GOW2_TT_11 = 11
 	TAG_GOW2_TT_12 = 12
 	TAG_GOW2_TT_13 = 13
@@ -43,7 +46,7 @@ func (w *Wad) gow2parseTag(tag *Tag, currentNode *NodeId, newGroupTag *bool, add
 		} else {
 			*newGroupTag = false
 		}
-	case TAG_GOW2_TT_11, TAG_GOW2_TT_12, TAG_GOW2_TT_13, TAG_GOW2_TT_14, TAG_GOW2_TT_15, TAG_GOW2_TT_16, TAG_GOW2_TT_18:
+	case TAG_GOW2_TT_11, TAG_GOW2_TT_12, TAG_GOW2_TT_13, TAG_GOW2_TT_14, TAG_GOW2_TT_15, TAG_GOW2_TT_16, TAG_GOW2_TT_18,TAG_GOW2_TT_6, TAG_GOW2_TT_7, TAG_GOW2_TT_9:
 		/*
 			tag11:
 				unk 4 bytes (32 CB 08 4A)
