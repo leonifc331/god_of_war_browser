@@ -28,7 +28,7 @@ func (per *EncounterReaderWriter) ReadAt(p []byte, off int64) (n int, err error)
 	case PACK_ADDR_INDEX:
 		return per.pa.paks[per.e.Pak].ReadAt(p, per.e.Offset+off)
 	default:
-		log.Panicf("Unknown addrType for reading: %v", per.pa.addrType)
+		log.Panicf("AddrType desconhecido para leitura: %v", per.pa.addrType)
 		return 0, nil
 	}
 }
@@ -40,7 +40,7 @@ func (per *EncounterReaderWriter) WriteAt(p []byte, off int64) (n int, err error
 	case PACK_ADDR_INDEX:
 		return per.pa.paks[per.e.Pak].WriteAt(p, per.e.Offset+off)
 	default:
-		log.Panicf("Unknown addrType for reading: %v", per.pa.addrType)
+		log.Panicf("AddrType desconhecido para leitura: %v", per.pa.addrType)
 		return 0, nil
 	}
 }
