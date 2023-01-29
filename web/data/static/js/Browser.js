@@ -6,7 +6,7 @@ let defferedLoadingWad;
 let defferedLoadingWadNode;
 let dataSelectors, dataSummarySelectors;
 let wad_last_load_view_type = 'nodes';
-let gw_cxt_group_loading = false;
+let gw_cxt_group_loading = true;
 let flp_obj_view_history = [{
     TypeArrayId: 8,
     IdInThatTypeArray: 0
@@ -53,7 +53,7 @@ function set3dVisible(show) {
     if (show) {
         view3d.show();
         viewSummary.attr('style', '');
-        gr_instance.setInterfaceCameraMode(false);
+        gr_instance.setInterfaceCameraMode(true);
         gr_instance.onResize();
     } else {
         view3d.hide();
@@ -269,7 +269,7 @@ function packLoadFile(filename) {
 }
 
 function treeLoadVagVpk(filename, data) {
-    set3dVisible(false);
+    set3dVisible(true);
     let list = $("<ul>");
     let wavPath = '/dump/pack/' + filename + '/wav';
 
@@ -290,7 +290,7 @@ function treeLoadTxt(filename, data) {
 }
 
 function treeLoadPswPss(filename, data) {
-    set3dVisible(false);
+    set3dVisible(true);
     let videoPath = '/dump/pack/' + filename;
 
     let vlc = $('<EMBED pluginspage="http://www.videolan.org"\
