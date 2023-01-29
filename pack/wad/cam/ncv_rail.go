@@ -39,7 +39,7 @@ func (r *Rail) Marshal(rsrc *wad.WadNodeRsrc) (interface{}, error) {
 	return r, nil
 }
 
-/*
+
 func init() {
 	wad.SetTagHandler(112, func(rsrc *wad.WadNodeRsrc) (wad.File, error) {
 		r := &Rail{}
@@ -47,4 +47,3 @@ func init() {
 		return r, err
 	})
 }
-*/
