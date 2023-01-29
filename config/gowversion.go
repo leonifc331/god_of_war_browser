@@ -15,7 +15,7 @@ const (
 const (
 	PS2 = iota
 	PS3
-	PS4
+	PS4 = 4
 	PSVita
 	PC
 )
