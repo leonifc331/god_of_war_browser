@@ -17,6 +17,7 @@ const (
 	TAG_GOW2_TT_14 = 14
 	TAG_GOW2_TT_15 = 15
 	TAG_GOW2_TT_16 = 16
+	TAG_GOW2_TT_18 = 18
 )
 
 func (w *Wad) gow2parseTag(tag *Tag, currentNode *NodeId, newGroupTag *bool, addNode func(tag *Tag) *Node) error {
@@ -42,7 +43,7 @@ func (w *Wad) gow2parseTag(tag *Tag, currentNode *NodeId, newGroupTag *bool, add
 		} else {
 			*newGroupTag = false
 		}
-	case TAG_GOW2_TT_11, TAG_GOW2_TT_12, TAG_GOW2_TT_13, TAG_GOW2_TT_14, TAG_GOW2_TT_15, TAG_GOW2_TT_16:
+	case TAG_GOW2_TT_11, TAG_GOW2_TT_12, TAG_GOW2_TT_13, TAG_GOW2_TT_14, TAG_GOW2_TT_15, TAG_GOW2_TT_16, TAG_GOW2_TT_18:
 		/*
 			tag11:
 				unk 4 bytes (32 CB 08 4A)
