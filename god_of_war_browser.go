@@ -55,7 +55,7 @@ func main() {
 	flag.StringVar(&psversion, "ps", "ps2", "Playstation version (ps2, ps3, ps4, psvita, pc)")
 	flag.IntVar(&gowversion, "gowversion", 0, "0 - auto, 1 - 'gow1', 2 - 'gow2', 3 - 'gow3', 2018 - 'gow2018'")
 	flag.BoolVar(&parsecheck, "parsecheck", true, "Check every file for parse errors (for devs)")
-	flag.BoolVar(&listencodings, "listencodings", true, "List text encodings")
+	flag.BoolVar(&listencodings, "listencodings", false, "List text encodings")
 	flag.StringVar(&encoding, "encoding", "Windows 1252", "Select text encodings")
 	flag.Parse()
 
