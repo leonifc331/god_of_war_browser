@@ -53,8 +53,8 @@ func (iso *IsoDriver) GetElement(name string) (vfs.Element, error) {
 	}
 	return nil, os.ErrNotExist
 }
-func (iso *IsoDriver) Add(e vfs.Element) error  { panic("Not implemented") }
-func (iso *IsoDriver) Remove(name string) error { panic("Not implemented") }
+func (iso *IsoDriver) Add(e vfs.Element) error  { panic("Não Implementado") }
+func (iso *IsoDriver) Remove(name string) error { panic("Não Implementado") }
 func (iso *IsoDriver) Sync() error {
 	if s, ok := iso.f.(vfs.Syncer); ok {
 		return s.Sync()
@@ -68,14 +68,14 @@ func (iso *IsoDriver) OpenStreams() error {
 	var volSizeBuf [4]byte
 	// primary volume description sector + offset of volume space size
 	if _, err := iso.f.ReadAt(volSizeBuf[:], 0x10*2048+80); err != nil {
-		log.Printf("[vfs] [iso] Error when detecting second layer: Read vol size buf error: %v", err)
+		log.Printf("[vfs] [iso] Erro ao detectar a segunda camada: Erro ao ler o tamanho do volume do BUF: %v", err)
 	} else {
 		// minus 16 boot sectors, because they do not replicated over layers (volumes)
 		volumeSize := int64(binary.LittleEndian.Uint32(volSizeBuf[:])-16) * utils.SECTOR_SIZE
 
 		if volumeSize+256*utils.SECTOR_SIZE < iso.f.Size() {
 			iso.layers[1] = udf.NewUdfFromReader(io.NewSectionReader(iso.f, volumeSize, iso.f.Size()-volumeSize))
-			log.Printf("[vfs] [iso] Detected second layer of disk. Start: 0x%x (0x%x)", volumeSize+16*utils.SECTOR_SIZE, volumeSize)
+			log.Printf("[vfs] [iso] Segunda camada do disco detectada. Início: 0x%x (0x%x)", volumeSize+16*utils.SECTOR_SIZE, volumeSize)
 			iso.secondLayerStart = volumeSize
 		}
 	}
@@ -120,17 +120,17 @@ func (f *IsoDriverFile) Copy(src io.Reader) error {
 		return err
 	}
 	if int64(b.Len()) != f.Size() {
-		return fmt.Errorf("[vfs] [iso] Do not support file size changing")
+		return fmt.Errorf("[vfs] [iso] Não suporta mudança de tamanho de arquivo")
 	}
 	_, err := f.WriteAt(b.Bytes(), 0)
 	return err
 }
 func (f *IsoDriverFile) WriteAt(b []byte, off int64) (n int, err error) {
 	if f.readonly {
-		return 0, fmt.Errorf("[vfs] [iso] Readonly mode")
+		return 0, fmt.Errorf("[vfs] [iso] Modo de Somente Leitura ativado")
 	}
 	if off+int64(len(b)) > f.Size() {
-		return 0, fmt.Errorf("[vfs] [iso] Do not support file size increasing")
+		return 0, fmt.Errorf("[vfs] [iso] Não suporta mudança de tamanho de arquivo")
 	}
 
 	if f.f.Udf == f.iso.layers[1] {
@@ -140,7 +140,7 @@ func (f *IsoDriverFile) WriteAt(b []byte, off int64) (n int, err error) {
 }
 func (f *IsoDriverFile) Sync() error {
 	if f.readonly {
-		return fmt.Errorf("[vfs] [iso] Readonly mode")
+		return fmt.Errorf("[vfs] [iso] Modo de Somente Leitura ativado")
 	}
 	return f.iso.Sync()
 }
