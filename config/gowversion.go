@@ -15,7 +15,7 @@ const (
 const (
 	PS2 = iota
 	PS3
-	PS4 = 4
+	PS4 
 	PSVita
 	PC
 )
@@ -34,7 +34,7 @@ func GetGOWVersion() GOWVersion {
 func SetGOWVersion(v GOWVersion) {
 	switch v {
 	default:
-		log.Panicf("Unknown gow version '%v'", v)
+		log.Panicf("Versão desconhecida '%v'", v)
 	case GOWunknown:
 	case GOW1:
 	case GOW2:
