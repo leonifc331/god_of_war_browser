@@ -8,8 +8,8 @@ func GetServerInstanceTag() uint16 {
 		return TAG_GOW1_SERVER_INSTANCE
 	case config.GOW2:
 		return TAG_GOW2_SERVER_INSTANCE
-	case config.GOW3
-		retunr TAG_GOW3_SERVER_INSTANCE
+	case config.GOW3:
+		return TAG_GOW3_SERVER_INSTANCE
 	case config.GOW2018:
 		return TAG_GOW2018_SERVER_INSTANCE
 	default:
