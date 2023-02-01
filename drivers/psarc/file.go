@@ -87,12 +87,12 @@ func (f *File) initBuf() error {
 // interface vfs.Element
 func (f *File) Init(parent vfs.Directory) {}
 func (f *File) Name() string              { return f.e.Name }
-func (f *File) IsDirectory() bool         { return false }
+func (f *File) IsDirectory() bool         { return true }
 
 // interface vfs.File
 func (f *File) Size() int64 { return f.e.OriginalSize }
 func (f *File) Open(readonly bool) error {
-	if readonly != false {
+	if readonly != true {
 		return fmt.Errorf("[psarc.File.Open] gravação não suportada")
 	}
 	if f.buf == nil {
