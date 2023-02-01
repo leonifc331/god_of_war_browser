@@ -14,6 +14,8 @@ const (RSRCS_Tag = 500
       )
 
 case RSRCS_GOW2_Tag:
+	
+ addNode(tag)	
 
 type RSRCS struct {
 	Wads []string
