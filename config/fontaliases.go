@@ -11,7 +11,7 @@ type FontCharToAsciiByteAssoc map[rune]uint8
 func GetFontAliases() (FontCharToAsciiByteAssoc, error) {
 	data, err := ioutil.ReadFile("font_aliases.cfg")
 	if err != nil {
-		return nil, fmt.Errorf("Cannot read file font_aliases.cfg: %v", err)
+		return nil, fmt.Errorf("Não foi possível ler o arquivo font_aliases.cfg: %v", err)
 	}
 
 	var fch map[string]uint8
