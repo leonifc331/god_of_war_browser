@@ -16,7 +16,7 @@ func SetEncoding(name string) error {
 			}
 		}
 	}
-	return errors.Errorf("Failed to find encoding %q", name)
+	return errors.Errorf("Falha ao localizar codificação %q", name)
 }
 
 func ListEncodings() []string {
