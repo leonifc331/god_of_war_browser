@@ -13,9 +13,6 @@ const (RSRCS_Tag = 500
        RSRCS_GOW2_Tag = 18
       )
 
-case RSRCS_GOW2_Tag:
-	
- addNode(tag)	
 
 type RSRCS struct {
 	Wads []string
