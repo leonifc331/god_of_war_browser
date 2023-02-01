@@ -92,7 +92,7 @@ func (f *File) IsDirectory() bool         { return false }
 // interface vfs.File
 func (f *File) Size() int64 { return f.e.OriginalSize }
 func (f *File) Open(readonly bool) error {
-	if readonly != true {
+	if readonly != false {
 		return fmt.Errorf("[psarc.File.Open] gravação não suportada")
 	}
 	if f.buf == nil {
