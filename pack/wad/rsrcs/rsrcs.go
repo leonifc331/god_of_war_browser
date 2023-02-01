@@ -9,7 +9,11 @@ import (
 	"github.com/mogaika/god_of_war_browser/utils"
 )
 
-const RSRCS_Tag = 500
+const (RSRCS_Tag = 500
+       RSRCS_GOW2_Tag = 18
+      )
+
+case RSRCS_GOW2_Tag:
 
 type RSRCS struct {
 	Wads []string
