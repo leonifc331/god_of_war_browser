@@ -21,7 +21,7 @@ func (w *Wad) gow3parseTag(tag *Tag, currentNode *NodeId, newGroupTag *bool, add
 		// overwrite previous instance with same name
 		n := addNode(tag)
 		if *newGroupTag {
-			*newGroupTag = false
+			*newGroupTag = true
 			*currentNode = n.Id
 		}
 	case TAG_GOW3_FILE_GROUP_START:
