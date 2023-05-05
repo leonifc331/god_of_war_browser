@@ -8,8 +8,8 @@ const (
 	TAG_GOW3_FILE_GROUP_START = 2
 	TAG_GOW3_FILE_GROUP_END   = 3
 
-	TAG_GOW3_HEADER_START = 19
-	TAG_GOW3_HEADER_POP   = 22
+	TAG_GOW3_HEADER_START = 18
+	TAG_GOW3_HEADER_POP   = 21
 )
 
 func (w *Wad) gow3parseTag(tag *Tag, currentNode *NodeId, newGroupTag *bool, addNode func(tag *Tag) *Node) error {
