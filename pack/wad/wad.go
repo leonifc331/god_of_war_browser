@@ -15,7 +15,6 @@ import (
 	"github.com/mogaika/god_of_war_browser/utils"
 )
 
-const WAD_ITEM_SIZE = 0x20
 
 type File interface {
 	Marshal(rsrc *WadNodeRsrc) (interface{}, error)
