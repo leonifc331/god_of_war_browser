@@ -15,6 +15,7 @@ import (
 	"github.com/mogaika/god_of_war_browser/utils"
 )
 
+const WAD_ITEM_SIZE = 0x20
 
 type File interface {
 	Marshal(rsrc *WadNodeRsrc) (interface{}, error)
@@ -122,23 +123,12 @@ func (w *Wad) GetInstanceFromNode(nodeId NodeId) (File, uint32, error) {
 }
 
 func UnmarshalTag(buf []byte) Tag {
-	if config.GetGOWVersion() == config.GOW2018 {
-		return Tag{
-			Tag:   binary.LittleEndian.Uint16(buf[0:2]),
-			Flags: binary.LittleEndian.Uint16(buf[2:4]),
-			Size:  binary.LittleEndian.Uint32(buf[4:8]),
-			// guid
-			Name:   utils.BytesToString(buf[0x18:0x50]),
-			NodeId: NODE_INVALID,
-		}
-	} else {
-		return Tag{
-			Tag:    binary.LittleEndian.Uint16(buf[0:2]),
-			Flags:  binary.LittleEndian.Uint16(buf[2:4]),
-			Size:   binary.LittleEndian.Uint32(buf[4:8]),
-			Name:   utils.BytesToString(buf[8:32]),
-			NodeId: NODE_INVALID,
-		}
+	return Tag{
+		Tag:    binary.LittleEndian.Uint16(buf[0:2]),
+		Flags:  binary.LittleEndian.Uint16(buf[2:4]),
+		Size:   binary.LittleEndian.Uint32(buf[4:8]),
+		Name:   utils.BytesToString(buf[8:32]),
+		NodeId: NODE_INVALID,
 	}
 }
 
@@ -167,16 +157,7 @@ func (w *Wad) GetNodeResourceByTagId(id TagId) *WadNodeRsrc {
 func (w *Wad) loadTags(r io.ReadSeeker) error {
 	w.Tags = make([]Tag, 0)
 	w.HeapSizes = make(map[string]uint32)
-
-	isGow2018 := config.GetGOWVersion() == config.GOW2018
-
-	var buf []byte
-	if isGow2018 {
-		buf = make([]byte, TAG_GOW2018_SIZE)
-	} else {
-		buf = make([]byte, WAD_ITEM_SIZE)
-	}
-
+	var buf [WAD_ITEM_SIZE]byte
 	pos := int64(0)
 
 	for id := TagId(0); ; id++ {
@@ -188,7 +169,6 @@ func (w *Wad) loadTags(r io.ReadSeeker) error {
 				return fmt.Errorf("Error reading from wad: %v", err)
 			}
 		}
-
 		t := UnmarshalTag(buf[:])
 		t.Id = id
 		t.DebugPos = uint32(pos)
@@ -264,12 +244,6 @@ func (w *Wad) parseTags() error {
 		for id := range w.Tags {
 			if err := w.gow2parseTag(&w.Tags[id], &currentNode, &newGroupTag, addNode); err != nil {
 				return fmt.Errorf("Error parsing gow2 tag: %v", err)
-			}
-		}
-	case config.GOW2018:
-		for id := range w.Tags {
-			if err := w.gow2018parseTag(&w.Tags[id], &currentNode, &newGroupTag, addNode); err != nil {
-				return fmt.Errorf("Error parsing gow2018 tag: %v", err)
 			}
 		}
 	default:
