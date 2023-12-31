@@ -63,7 +63,7 @@ func NewFromDataGow2(buf []byte, objName string) (*Object, error) {
 
 		joint := &obj.Joints[i]
 
-		
+		/*
 			fti := func(flag uint32) int {
 				if flags&flag != 0 {
 					return 1
@@ -72,7 +72,7 @@ func NewFromDataGow2(buf []byte, objName string) (*Object, error) {
 				}
 			}
 
-			if fti(8) != 0 {
+			//if fti(8) != 0 {
 			if !called {
 				called = true
 				log.Printf("loading object %q", objName)
@@ -85,8 +85,8 @@ func NewFromDataGow2(buf []byte, objName string) (*Object, error) {
 				fti(0x8000),
 				joint.Name,
 			)
-			}
-		
+			//}
+		*/
 
 		if joint.IsSkinned {
 			invid++
