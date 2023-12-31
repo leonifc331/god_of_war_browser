@@ -62,9 +62,9 @@ type Joint struct {
 
 	InvId int16
 
-	BindToJointMat mgl32.Mat4 // bind world joint => local joint
-	ParentToJoint  mgl32.Mat4 // idle parent local joint => local joint
+	BindToJointMat    mgl32.Mat4 // bind world joint => local joint
 	BindWorldJoint    mgl32.Mat4 // bind world joint
+	ParentToJoint     mgl32.Mat4 // idle parent local joint => local joint
 	OurJointToIdleMat mgl32.Mat4 // idle world joint
 	RenderMat         mgl32.Mat4 // bind world joint => idle world joint
 }
@@ -157,7 +157,7 @@ func NewFromData(buf []byte, objName string) (*Object, error) {
 	vec6offset := binary.LittleEndian.Uint32(matdata[40:44])
 	vec7offset := binary.LittleEndian.Uint32(matdata[44:48])
 
-	called := false
+	// called := false
 
 	invid := int16(0)
 	for i := range obj.Joints {
@@ -186,7 +186,7 @@ func NewFromData(buf []byte, objName string) (*Object, error) {
 
 		joint := &obj.Joints[i]
 
-		
+		/*
 			fti := func(flag uint32) int {
 				if flags&flag != 0 {
 					return 1
@@ -195,7 +195,7 @@ func NewFromData(buf []byte, objName string) (*Object, error) {
 				}
 			}
 
-			if fti(8) != 0 {
+			//if fti(8) != 0 {
 			if !called {
 				called = true
 				log.Printf("loading object %q", objName)
@@ -208,7 +208,8 @@ func NewFromData(buf []byte, objName string) (*Object, error) {
 				fti(0x8000),
 				joint.Name,
 			)
-			}
+			//}
+		*/
 
 		if joint.IsSkinned {
 			invid++
@@ -218,7 +219,7 @@ func NewFromData(buf []byte, objName string) (*Object, error) {
 		return nil, fmt.Errorf("Invalid inv mat id calculation %v != %v", invid, mat3count)
 	}
 
-	log.Println(obj.File0x20, obj.File0x24, obj.jointsCount)
+	// log.Println(obj.File0x20, obj.File0x24, obj.jointsCount)
 	if obj.File0x20 != 0 {
 		return nil, fmt.Errorf("Invalid File0x20 == 0x%x", obj.File0x20)
 	}
@@ -269,7 +270,7 @@ func NewFromData(buf []byte, objName string) (*Object, error) {
 		}
 	}
 
-	utils.LogDump(obj)
+	//utils.LogDump(obj)
 
 	obj.FillJoints()
 
@@ -278,7 +279,7 @@ func NewFromData(buf []byte, objName string) (*Object, error) {
 		s += fmt.Sprintf("\n   m3[%.2x]: %f %f %f", i, m[12], m[13], m[14])
 	}
 
-	log.Printf("%s\n%s", s, obj.StringTree())
+	// log.Printf("%s\n%s", s, obj.StringTree())
 
 	return obj, nil
 }
@@ -293,19 +294,31 @@ func (obj *Object) FillJoints() {
 		} else {
 			j.BindToJointMat = mgl32.Ident4()
 		}
+
+		j.BindWorldJoint = j.BindToJointMat.Inv()
+
+		if j.Parent != JOINT_CHILD_NONE {
+			j.OurJointToIdleMat = obj.Joints[j.Parent].OurJointToIdleMat.Mul4(j.ParentToJoint)
+			//j.BindGlobalMat = obj.Joints[j.Parent].BindGlobalMat.Mul4(j.BindToJointMat.Inv())
+		} else {
+			j.OurJointToIdleMat = j.ParentToJoint
+			//j.BindGlobalMat = j.BindToJointMat.Inv()
+		}
+
+		if j.IsSkinned {
+			j.RenderMat = j.OurJointToIdleMat.Mul4(j.BindToJointMat)
+		} else {
+			j.RenderMat = j.OurJointToIdleMat
+		}
 	}
 }
 
 type ObjMarshal struct {
-	Data             *Object
-	Model            *mdl.Ajax
-	Collisions       []*collision.Collision
-	Script           *scr.ScriptParams
-	Animations       *anm.Animations
-	Cameras          []interface{}
-	ParticleEmitters []interface{}
-	Particles        []interface{}
-	SoundEmitters    []interface{}
+	Data       *Object
+	Model      interface{}
+	Collision  interface{}
+	Script     interface{}
+	Animations interface{}
 }
 
 func (obj *Object) Marshal(wrsrc *wad.WadNodeRsrc) (interface{}, error) {
@@ -319,15 +332,15 @@ func (obj *Object) Marshal(wrsrc *wad.WadNodeRsrc) (interface{}, error) {
 					log.Panicf("Obj %q marshal problem of subobject %q: %v", wrsrc.Tag.Name, n.Tag.Name, err)
 					//continue
 				} else {
-					switch v := subFileMarshled.(type) {
-					case *mdl.Ajax:
-						mrshl.Model = v
+					switch inst.(type) {
+					case *mdl.Model:
+						mrshl.Model = subFileMarshled
 					case *collision.Collision:
-						mrshl.Collisions = append(mrshl.Collisions, v)
+						mrshl.Collision = subFileMarshled
 					case *scr.ScriptParams:
-						mrshl.Script = v
+						mrshl.Script = subFileMarshled
 					case *anm.Animations:
-						mrshl.Animations = v
+						mrshl.Animations = subFileMarshled
 					}
 				}
 			}
