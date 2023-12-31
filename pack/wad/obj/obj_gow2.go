@@ -35,7 +35,7 @@ func NewFromDataGow2(buf []byte, objName string) (*Object, error) {
 	vec6offset := binary.LittleEndian.Uint32(matdata[40:44])
 	vec7offset := binary.LittleEndian.Uint32(matdata[44:48])
 
-	// called := false
+	 called := false
 
 	log.Printf("mat1 %d mat2 %d mat3 %d", mat1count, mat2count, mat3count)
 
@@ -65,7 +65,7 @@ func NewFromDataGow2(buf []byte, objName string) (*Object, error) {
 
 		joint := &obj.Joints[i]
 
-		/*
+		
 			fti := func(flag uint32) int {
 				if flags&flag != 0 {
 					return 1
@@ -74,7 +74,7 @@ func NewFromDataGow2(buf []byte, objName string) (*Object, error) {
 				}
 			}
 
-			//if fti(8) != 0 {
+			if fti(8) != 0 {
 			if !called {
 				called = true
 				log.Printf("loading object %q", objName)
@@ -87,7 +87,7 @@ func NewFromDataGow2(buf []byte, objName string) (*Object, error) {
 				fti(0x8000),
 				joint.Name,
 			)
-			//}
+			}
 		*/
 		_ = joint
 		if joint.IsSkinned {
@@ -98,7 +98,7 @@ func NewFromDataGow2(buf []byte, objName string) (*Object, error) {
 		return nil, fmt.Errorf("Invalid inv mat id calculation %v != %v", invid, mat3count)
 	}
 
-	// log.Println(obj.File0x20, obj.File0x24, obj.jointsCount)
+	log.Println(obj.File0x20, obj.File0x24, obj.jointsCount)
 	if obj.File0x20 != 0 {
 		return nil, fmt.Errorf("Invalid File0x20 == 0x%x", obj.File0x20)
 	}
@@ -149,16 +149,16 @@ func NewFromDataGow2(buf []byte, objName string) (*Object, error) {
 		}
 	}
 
-	//utils.LogDump(obj)
+	utils.LogDump(obj)
 
 	obj.FillJoints()
-	/*
+	
 		s := ""
 		for i, m := range obj.Matrixes3 {
 			s += fmt.Sprintf("\n   m3[%.2x]: %f %f %f", i, m[12], m[13], m[14])
 		}
-	*/
-	// log.Printf("%s\n%s", s, obj.StringTree())
+	
+	log.Printf("%s\n%s", s, obj.StringTree())
 
 	return obj, nil
 }
