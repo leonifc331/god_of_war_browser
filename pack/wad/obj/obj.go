@@ -64,9 +64,9 @@ type Joint struct {
 
 	BindToJointMat mgl32.Mat4 // bind world joint => local joint
 	ParentToJoint  mgl32.Mat4 // idle parent local joint => local joint
-	//BindWorldJoint    mgl32.Mat4 // bind world joint
-	//OurJointToIdleMat mgl32.Mat4 // idle world joint
-	//RenderMat         mgl32.Mat4 // bind world joint => idle world joint
+	BindWorldJoint    mgl32.Mat4 // bind world joint
+	OurJointToIdleMat mgl32.Mat4 // idle world joint
+	RenderMat         mgl32.Mat4 // bind world joint => idle world joint
 }
 
 const JOINT_CHILD_NONE = -1
@@ -157,7 +157,7 @@ func NewFromData(buf []byte, objName string) (*Object, error) {
 	vec6offset := binary.LittleEndian.Uint32(matdata[40:44])
 	vec7offset := binary.LittleEndian.Uint32(matdata[44:48])
 
-	// called := false
+	called := false
 
 	invid := int16(0)
 	for i := range obj.Joints {
@@ -186,7 +186,7 @@ func NewFromData(buf []byte, objName string) (*Object, error) {
 
 		joint := &obj.Joints[i]
 
-		/*
+		
 			fti := func(flag uint32) int {
 				if flags&flag != 0 {
 					return 1
@@ -195,7 +195,7 @@ func NewFromData(buf []byte, objName string) (*Object, error) {
 				}
 			}
 
-			//if fti(8) != 0 {
+			if fti(8) != 0 {
 			if !called {
 				called = true
 				log.Printf("loading object %q", objName)
@@ -208,8 +208,7 @@ func NewFromData(buf []byte, objName string) (*Object, error) {
 				fti(0x8000),
 				joint.Name,
 			)
-			//}
-		*/
+			}
 
 		if joint.IsSkinned {
 			invid++
@@ -219,7 +218,7 @@ func NewFromData(buf []byte, objName string) (*Object, error) {
 		return nil, fmt.Errorf("Invalid inv mat id calculation %v != %v", invid, mat3count)
 	}
 
-	// log.Println(obj.File0x20, obj.File0x24, obj.jointsCount)
+	log.Println(obj.File0x20, obj.File0x24, obj.jointsCount)
 	if obj.File0x20 != 0 {
 		return nil, fmt.Errorf("Invalid File0x20 == 0x%x", obj.File0x20)
 	}
@@ -270,7 +269,7 @@ func NewFromData(buf []byte, objName string) (*Object, error) {
 		}
 	}
 
-	//utils.LogDump(obj)
+	utils.LogDump(obj)
 
 	obj.FillJoints()
 
@@ -279,7 +278,7 @@ func NewFromData(buf []byte, objName string) (*Object, error) {
 		s += fmt.Sprintf("\n   m3[%.2x]: %f %f %f", i, m[12], m[13], m[14])
 	}
 
-	// log.Printf("%s\n%s", s, obj.StringTree())
+	log.Printf("%s\n%s", s, obj.StringTree())
 
 	return obj, nil
 }
