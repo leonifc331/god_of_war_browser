@@ -10,11 +10,6 @@ import (
 )
 
 func (mesh *Mesh) HttpAction(wrsrc *wad.WadNodeRsrc, w http.ResponseWriter, r *http.Request) {
-	webutils.WriteFileHeaders(w, wrsrc.Tag.Name+".fbx")
-	if err := mesh.ExportFbxDefault(wrsrc).Write(w); err != nil {
-		log.Printf("Error when exporting mesh as fbx: %v", err)
-	}
-
 	webutils.WriteFileHeaders(w, wrsrc.Tag.Name+".obj")
 	if err := mesh.ExportObj(w, nil); err != nil {
 		log.Printf("Error when exporting mesh as obj: %v", err)
