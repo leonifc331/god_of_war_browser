@@ -22,21 +22,21 @@ const (
 )
 
 type Ps3Texture struct {
-	Unk00              uint32
-	DataTotalSize      uint32
-	Unk08              uint32
-	Zero0c             uint32
-	DataOffset         uint32
-	DataPayloadSize    uint32
-	TextureColorFormat uint8 // use CELL_GCM_TEXTURE_ from pcsx3
-	MipMapCounts       uint8
-	Unk1a              uint8
-	Zero1b             uint8
-	Unk1c              uint32
-	Width              uint16
-	Height             uint16
-	Zero24             uint8
-	Unk25              uint8
+	Unk00              uint32 // 0x0
+	DataTotalSize      uint32 // 0x4 tamanho total
+	Unk08              uint32 // 0x8
+	Zero0c             uint32 // 0xC 
+	DataOffset         uint32 // 0x10
+	DataPayloadSize    uint32 // 0x14 Tamanho da caregamento útil de dados
+	TextureColorFormat uint8 // 0x18 Formato da textura
+	MipMapCounts       uint8 // 0x19
+	Unk1a              uint8 // 0x1A
+	Zero1b             uint8 // 0x1B
+	Unk1c              uint32 // 0x1C
+	Width              uint16 // 0x20 Largura
+	Height             uint16 // 0x22 Altura
+	Zero24             uint8 // 0x24
+	Unk25              uint8 // 0x25
 
 	images []image.Image
 }
