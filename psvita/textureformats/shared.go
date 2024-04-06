@@ -19,9 +19,9 @@ func rgb565fromUint16(v uint16) (r, g, b uint16) {
 	g = (v >> 5) & 0x3f
 	b = (v >> 0) & 0x1f
 
-	// r = uint16(((uint32(r) * 255) + 15) / 31)
-	// g = uint16(((uint32(g) * 255) + 31) / 63)
-	// b = uint16(((uint32(b) * 255) + 15) / 31)
+	 r = uint16(((uint32(r) * 255) + 15) / 31)
+	 g = uint16(((uint32(g) * 255) + 31) / 63)
+	 b = uint16(((uint32(b) * 255) + 15) / 31)
 
 	r = (r << 3) | (r >> 2)
 	g = (g << 2) | (g >> 4)
