@@ -23,11 +23,11 @@ func (i *Instance) ExportGLTF(wrsrc *wad.WadNodeRsrc, gltfCacher *gltfutils.GLTF
 	defer gltfCacher.AddCache(wrsrc.Tag.Id, tfoe)
 
 	scale := i.Rotation[3]
-	q := utils.EulerToQuat(i.Rotation.Vec3().Mul((180.0 / math.Pi)))
+	eulerRotation := i.Rotation.Vec3() // Mantém a rotação em Euler
 	node := &gltf.Node{
 		Name:        wrsrc.Name(),
 		Translation: i.Position1.Vec3(),
-		Rotation:    [4]float32{q.V[0], q.V[1], q.V[2], q.W},
+		Rotation:    [3]float32{eulerRotation[0], eulerRotation[1], eulerRotation[2]}, // Define rotação em Euler
 		Scale:       mgl32.Vec3{scale, scale, scale},
 	}
 
@@ -40,7 +40,7 @@ func (i *Instance) ExportGLTF(wrsrc *wad.WadNodeRsrc, gltfCacher *gltfutils.GLTF
 	} else {
 		objectI, _, err := wrsrc.Wad.GetInstanceFromNode(objectNode.Id)
 		if err != nil {
-			return nil, errors.Wrapf(err, "Failed to get isntance %q", i.Object)
+			return nil, errors.Wrapf(err, "Failed to get instance %q", i.Object)
 		}
 		subobject, err := objectI.(*file_obj.Object).ExportGLTF(wrsrc.Wad.GetNodeResourceByNodeId(objectNode.Id), gltfCacher)
 		if err != nil {
@@ -51,3 +51,4 @@ func (i *Instance) ExportGLTF(wrsrc *wad.WadNodeRsrc, gltfCacher *gltfutils.GLTF
 
 	return tfoe, nil
 }
+
