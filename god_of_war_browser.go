@@ -9,20 +9,19 @@ import (
 	"time"
 
 	"github.com/mogaika/god_of_war_browser/status"
-
 	"github.com/mogaika/god_of_war_browser/config"
 	"github.com/mogaika/god_of_war_browser/vfs"
 	"github.com/mogaika/god_of_war_browser/web"
-
 	"github.com/mogaika/god_of_war_browser/drivers/iso"
 	"github.com/mogaika/god_of_war_browser/drivers/psarc"
 	"github.com/mogaika/god_of_war_browser/drivers/toc"
+	"github.com/mogaika/god_of_war_browser/pack/wad"
 
+	// Import all asset packages
 	_ "github.com/mogaika/god_of_war_browser/pack/txt"
 	_ "github.com/mogaika/god_of_war_browser/pack/vag"
 	_ "github.com/mogaika/god_of_war_browser/pack/vpk"
 	_ "github.com/mogaika/god_of_war_browser/pack/wad"
-
 	_ "github.com/mogaika/god_of_war_browser/pack/wad/anm"
 	_ "github.com/mogaika/god_of_war_browser/pack/wad/cam"
 	_ "github.com/mogaika/god_of_war_browser/pack/wad/collision"
@@ -47,28 +46,26 @@ func main() {
 	var addr, tocpath, dirpath, isopath, psarcpath, psversion, encoding string
 	var gowversion int
 	var parsecheck, listencodings bool
-	flag.StringVar(&addr, "i", ":8000", "Address of server")
-	flag.StringVar(&tocpath, "toc", "", "Path to folder with toc file")
-	flag.StringVar(&dirpath, "dir", "", "Path to unpacked wads and other stuff")
-	flag.StringVar(&isopath, "iso", "", "Path to iso file")
-	flag.StringVar(&psarcpath, "psarc", "", "Path to ps3 psarc file")
-	flag.StringVar(&psversion, "ps", "ps2", "Playstation version (ps2, ps3, ps4, psvita, pc)")
-	flag.IntVar(&gowversion, "gowversion", 0, "0 - auto, 1 - 'GodOfWar1', 2 - 'GodOfWar2', 3 - 'gow3', 4 - GodOfWarGhostOfSparta, 5 - GodOfWarChainsOfOlympus, 2018 - 'gow2018'")
-	flag.BoolVar(&parsecheck, "parsecheck", false, "Check every file for parse errors (for devs)")
-	flag.BoolVar(&listencodings, "listencodings", false, "List text encodings")
-	flag.StringVar(&encoding, "encoding", "Windows 1252", "Select text encodings")
-	flag.Parse()
 
-	var err error
-	var gameDir vfs.Directory
-	var driverDir vfs.Directory
+	flag.StringVar(&addr, "i", ":8000", "Server address")
+	flag.StringVar(&tocpath, "toc", "", "Path to folder with TOC file")
+	flag.StringVar(&dirpath, "dir", "", "Path to unpacked WADs")
+	flag.StringVar(&isopath, "iso", "", "Path to ISO file")
+	flag.StringVar(&psarcpath, "psarc", "", "Path to PS3 PSARC file")
+	flag.StringVar(&psversion, "ps", "ps2", "PlayStation version (ps2, ps3, ps4, psvita, pc)")
+	flag.IntVar(&gowversion, "gowversion", 0, "0-auto, 1-GodOfWar1, 2-GodOfWar2, 3-gow3, 4-GhostOfSparta, 5-ChainsOfOlympus, 2018-gow2018")
+	flag.BoolVar(&parsecheck, "parsecheck", false, "Check all files for parse errors")
+	flag.BoolVar(&listencodings, "listencodings", false, "List available text encodings")
+	flag.StringVar(&encoding, "encoding", "Windows 1252", "Text encoding to use")
+	flag.Parse()
 
 	if listencodings {
 		listEncodings()
 		return
 	}
+
 	if encoding != "" {
-		log.Printf("Setting encoding %q", encoding)
+		log.Printf("Setting encoding to %q", encoding)
 		if err := config.SetEncoding(encoding); err != nil {
 			log.Printf("Failed to set encoding %q: %v", encoding, err)
 			listEncodings()
@@ -76,6 +73,7 @@ func main() {
 		}
 	}
 
+	// Set PlayStation version
 	switch psversion {
 	case "ps2":
 		config.SetPlayStationVersion(config.PS2)
@@ -88,66 +86,182 @@ func main() {
 	case "pc":
 		config.SetPlayStationVersion(config.PC)
 	default:
-		log.Fatalf("Provide correct 'ps' parameter (ps2, ps3, ps4, psvita)")
+		log.Fatalf("Invalid PlayStation version. Use: ps2, ps3, ps4, psvita or pc")
 	}
 
+	// Validate God of War version
+	if gowversion < 0 || (gowversion > 5 && gowversion != 2018) {
+		log.Fatalf("Invalid God of War version. Use values 0-5 or 2018")
+	}
 	config.SetGOWVersion(config.GOWVersion(gowversion))
 
-	if psarcpath != "" {
+	var gameDir, driverDir vfs.Directory
+	var err error
+
+	switch {
+	case psarcpath != "":
 		if config.GetPlayStationVersion() != config.PS3 && config.GetPlayStationVersion() != config.PSVita {
-			log.Fatalf("Cannot use psarcpath when 'ps' is not ps3, ps4 or psvita")
+			log.Fatalf("PSARC only supported for PS3/PSVita")
 		}
-		f := vfs.NewDirectoryDriverFile(psarcpath)
-		if err = f.Open(true); err == nil {
-			gameDir, err = psarc.NewPsarcDriver(f)
-		}
-	} else if isopath != "" {
-		f := vfs.NewDirectoryDriverFile(isopath)
-		if err = f.Open(false); err != nil {
-			log.Printf("Failed to open iso in rw mode, trying ro mode. (Probably emulator using same image)")
-			err = f.Open(true)
-		}
-		if err == nil {
-			if driverDir, err = iso.NewIsoDriver(f); err == nil {
-				gameDir, err = toc.NewTableOfContent(driverDir)
-			}
-		}
-	} else if tocpath != "" {
+		gameDir, err = setupPSARCDriver(psarcpath)
+
+	case isopath != "":
+		driverDir, gameDir, err = setupISODriver(isopath)
+
+	case tocpath != "":
 		gameDir, err = toc.NewTableOfContent(vfs.NewDirectoryDriver(tocpath))
-	} else if dirpath != "" {
-		gameDir = vfs.NewDirectoryDriver(dirpath)
+
+	case dirpath != "":
 		if gowversion == 0 {
-			log.Fatalf("You must provide 'gowversion' argument if you use directory driver")
+			log.Fatalf("Must specify 'gowversion' when using directory mode")
 		}
-	} else {
+		gameDir = vfs.NewDirectoryDriver(dirpath)
+
+	default:
 		flag.PrintDefaults()
 		return
 	}
 
 	if err != nil {
-		log.Fatalf("Cannot start god of war browser: %v", err)
+		log.Fatalf("Initialization failed: %v", err)
 	}
 
-	if f, err := setLogging(); err != nil {
-		log.Printf("Wasn't able to setup logs dup: %v", err)
+	logFile, err := setupLogging()
+	if err != nil {
+		log.Printf("Failed to setup logging: %v", err)
 	} else {
-		defer f.Close()
+		defer logFile.Close()
 	}
 
-	// parsecheck = true
 	if parsecheck {
 		parseCheck(gameDir)
 	}
-	status.Info("Starting web server on address '%s'", addr)
 
+	status.Info("Starting server on %s", addr)
 	if err := web.StartServer(addr, gameDir, driverDir, "web"); err != nil {
-		log.Fatalf("Cannot start web server: %v", err)
+		log.Fatalf("Failed to start web server: %v", err)
 	}
 }
 
-func setLogging() (io.Closer, error) {
-	os.MkdirAll("applogs", 0777)
-	f, err := os.Create(fmt.Sprintf("applogs/%s.log", time.Now().Format("2006.Jan.2_15.04.05")))
+func parseCheck(dir vfs.Directory) {
+	log.Println("Starting parse check on all files...")
+	startTime := time.Now()
+	totalFiles := 0
+	failedFiles := 0
+
+	var checkDir func(vfs.Directory, string) error
+	checkDir = func(currentDir vfs.Directory, path string) error {
+		entries, err := currentDir.List()
+		if err != nil {
+			return fmt.Errorf("error listing directory %s: %v", path, err)
+		}
+
+		for _, entry := range entries {
+			fullPath := path + "/" + entry.Name()
+			if entry.IsDir() {
+				subDir, err := currentDir.GetDirectory(entry.Name())
+				if err != nil {
+					log.Printf("ERROR: Couldn't access directory %s: %v", fullPath, err)
+					failedFiles++
+					continue
+				}
+				if err := checkDir(subDir, fullPath); err != nil {
+					return err
+				}
+			} else {
+				totalFiles++
+				file, err := currentDir.GetFile(entry.Name())
+				if err != nil {
+					log.Printf("ERROR: Failed to get file %s: %v", fullPath, err)
+					failedFiles++
+					continue
+				}
+
+				if _, err := file.GetData(); err != nil {
+					log.Printf("ERROR: Parse failed for %s: %v", fullPath, err)
+					failedFiles++
+					continue
+				}
+
+				if wadFile, ok := file.(wad.WAD); ok {
+					if err := verifyWAD(wadFile, fullPath); err != nil {
+						log.Printf("ERROR: WAD verification failed for %s: %v", fullPath, err)
+						failedFiles++
+					}
+				}
+			}
+		}
+		return nil
+	}
+
+	if err := checkDir(dir, ""); err != nil {
+		log.Printf("CRITICAL ERROR during check: %v", err)
+	}
+
+	duration := time.Since(startTime)
+	successRate := 100.0
+	if totalFiles > 0 {
+		successRate = float64(totalFiles-failedFiles) / float64(totalFiles) * 100
+	}
+
+	log.Printf("Parse check completed!\n"+
+		"Files checked: %d\n"+
+		"Failed files: %d\n"+
+		"Success rate: %.2f%%\n"+
+		"Total time: %v",
+		totalFiles, failedFiles, successRate, duration.Round(time.Millisecond))
+}
+
+func verifyWAD(wadFile wad.WAD, path string) error {
+	nodes, err := wadFile.Nodes()
+	if err != nil {
+		return fmt.Errorf("failed to get WAD nodes: %v", err)
+	}
+
+	for _, node := range nodes {
+		if _, err := wadFile.GetResourceByNode(node); err != nil {
+			return fmt.Errorf("failed to get resource %s (type %s): %v",
+				node.Name, node.Type, err)
+		}
+	}
+	return nil
+}
+
+func setupPSARCDriver(path string) (vfs.Directory, error) {
+	f := vfs.NewDirectoryDriverFile(path)
+	if err := f.Open(true); err != nil {
+		return nil, fmt.Errorf("error opening PSARC: %v", err)
+	}
+	defer f.Close()
+	return psarc.NewPsarcDriver(f)
+}
+
+func setupISODriver(path string) (vfs.Directory, vfs.Directory, error) {
+	f := vfs.NewDirectoryDriverFile(path)
+	if err := f.Open(false); err != nil {
+		log.Printf("Warning: Couldn't open ISO in RW mode, trying RO mode")
+		if err = f.Open(true); err != nil {
+			return nil, nil, fmt.Errorf("error opening ISO: %v", err)
+		}
+	}
+	defer f.Close()
+
+	driverDir, err := iso.NewIsoDriver(f)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	gameDir, err := toc.NewTableOfContent(driverDir)
+	return driverDir, gameDir, err
+}
+
+func setupLogging() (io.Closer, error) {
+	if err := os.MkdirAll("applogs", 0755); err != nil {
+		return nil, err
+	}
+
+	logPath := fmt.Sprintf("applogs/%s.log", time.Now().Format("2006-01-02_15-04-05"))
+	f, err := os.Create(logPath)
 	if err != nil {
 		return nil, err
 	}
@@ -157,9 +271,8 @@ func setLogging() (io.Closer, error) {
 }
 
 func listEncodings() {
-	s := fmt.Sprintf("Encodings list:")
-	for _, e := range config.ListEncodings() {
-		s += fmt.Sprintf("\n  %q", e)
+	log.Println("Available encodings:")
+	for _, enc := range config.ListEncodings() {
+		log.Printf("  %s", enc)
 	}
-	log.Println(s)
 }
