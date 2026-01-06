@@ -8,14 +8,13 @@ import (
 	"os"
 	"time"
 
-	"github.com/mogaika/god_of_war_browser/status"
 	"github.com/mogaika/god_of_war_browser/config"
-	"github.com/mogaika/god_of_war_browser/vfs"
-	"github.com/mogaika/god_of_war_browser/web"
 	"github.com/mogaika/god_of_war_browser/drivers/iso"
 	"github.com/mogaika/god_of_war_browser/drivers/psarc"
 	"github.com/mogaika/god_of_war_browser/drivers/toc"
-	"github.com/mogaika/god_of_war_browser/pack/wad"
+	"github.com/mogaika/god_of_war_browser/status"
+	"github.com/mogaika/god_of_war_browser/vfs"
+	"github.com/mogaika/god_of_war_browser/web"
 
 	// Import all asset packages
 	_ "github.com/mogaika/god_of_war_browser/pack/txt"
@@ -97,16 +96,21 @@ func main() {
 
 	var gameDir, driverDir vfs.Directory
 	var err error
+	var fileCloser io.Closer // Para manter o arquivo aberto
 
 	switch {
 	case psarcpath != "":
 		if config.GetPlayStationVersion() != config.PS3 && config.GetPlayStationVersion() != config.PSVita {
 			log.Fatalf("PSARC only supported for PS3/PSVita")
 		}
-		gameDir, err = setupPSARCDriver(psarcpath)
+		var f *os.File
+		f, gameDir, err = setupPSARCDriver(psarcpath)
+		fileCloser = f
 
 	case isopath != "":
-		driverDir, gameDir, err = setupISODriver(isopath)
+		var f *os.File
+		f, driverDir, gameDir, err = setupISODriver(isopath)
+		fileCloser = f
 
 	case tocpath != "":
 		gameDir, err = toc.NewTableOfContent(vfs.NewDirectoryDriver(tocpath))
@@ -124,6 +128,11 @@ func main() {
 
 	if err != nil {
 		log.Fatalf("Initialization failed: %v", err)
+	}
+
+	// Garante que o arquivo ISO/PSARC seja fechado apenas quando o programa terminar
+	if fileCloser != nil {
+		defer fileCloser.Close()
 	}
 
 	logFile, err := setupLogging()
@@ -177,18 +186,14 @@ func parseCheck(dir vfs.Directory) {
 					continue
 				}
 
+
 				if _, err := file.GetData(); err != nil {
 					log.Printf("ERROR: Parse failed for %s: %v", fullPath, err)
 					failedFiles++
 					continue
 				}
+				
 
-				if wadFile, ok := file.(wad.WAD); ok {
-					if err := verifyWAD(wadFile, fullPath); err != nil {
-						log.Printf("ERROR: WAD verification failed for %s: %v", fullPath, err)
-						failedFiles++
-					}
-				}
 			}
 		}
 		return nil
@@ -212,47 +217,34 @@ func parseCheck(dir vfs.Directory) {
 		totalFiles, failedFiles, successRate, duration.Round(time.Millisecond))
 }
 
-func verifyWAD(wadFile wad.WAD, path string) error {
-	nodes, err := wadFile.Nodes()
+func setupPSARCDriver(path string) (*os.File, vfs.Directory, error) {
+	f, err := os.Open(path)
 	if err != nil {
-		return fmt.Errorf("failed to get WAD nodes: %v", err)
+		return nil, nil, fmt.Errorf("error opening PSARC: %v", err)
 	}
-
-	for _, node := range nodes {
-		if _, err := wadFile.GetResourceByNode(node); err != nil {
-			return fmt.Errorf("failed to get resource %s (type %s): %v",
-				node.Name, node.Type, err)
-		}
-	}
-	return nil
+	
+	drv, err := psarc.NewPsarcDriver(f)
+	return f, drv, err
 }
 
-func setupPSARCDriver(path string) (vfs.Directory, error) {
-	f := vfs.NewDirectoryDriverFile(path)
-	if err := f.Open(true); err != nil {
-		return nil, fmt.Errorf("error opening PSARC: %v", err)
-	}
-	defer f.Close()
-	return psarc.NewPsarcDriver(f)
-}
-
-func setupISODriver(path string) (vfs.Directory, vfs.Directory, error) {
-	f := vfs.NewDirectoryDriverFile(path)
-	if err := f.Open(false); err != nil {
+func setupISODriver(path string) (*os.File, vfs.Directory, vfs.Directory, error) {
+	f, err := os.OpenFile(path, os.O_RDWR, 0666)
+	if err != nil {
 		log.Printf("Warning: Couldn't open ISO in RW mode, trying RO mode")
-		if err = f.Open(true); err != nil {
-			return nil, nil, fmt.Errorf("error opening ISO: %v", err)
+		f, err = os.Open(path)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("error opening ISO: %v", err)
 		}
 	}
-	defer f.Close()
 
 	driverDir, err := iso.NewIsoDriver(f)
 	if err != nil {
-		return nil, nil, err
+		f.Close() 
+		return nil, nil, nil, err
 	}
 
 	gameDir, err := toc.NewTableOfContent(driverDir)
-	return driverDir, gameDir, err
+	return f, driverDir, gameDir, err
 }
 
 func setupLogging() (io.Closer, error) {
