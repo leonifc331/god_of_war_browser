@@ -1,0 +1,66 @@
+diff --git a/god_of_war_browser.go b/god_of_war_browser.go
+--- a/god_of_war_browser.go
++++ b/god_of_war_browser.go
+@@
+-// Remover a função parseCheck duplicada deste arquivo.
+-// Manter somente a função parseCheck existente em parsecheck.go.
+@@
+-func setupPSARCDriver(path string) (*os.File, vfs.Directory, error) {
+-	f, err := os.Open(path)
+-	if err != nil {
+-		return nil, nil, fmt.Errorf("error opening PSARC: %v", err)
+-	}
+-	drv, err := psarc.NewPsarcDriver(f)
+-	return f, drv, err
+-}
++func setupPSARCDriver(path string) (io.Closer, vfs.Directory, error) {
++	f := vfs.NewDirectoryDriverFile(path)
++	if err := f.Open(true); err != nil {
++		return nil, nil, fmt.Errorf("error opening PSARC: %v", err)
++	}
++	drv, err := psarc.NewPsarcDriver(f)
++	if err != nil {
++		f.Close()
++		return nil, nil, err
++	}
++	return f, drv, nil
++}
+@@
+-func setupISODriver(path string) (*os.File, vfs.Directory, vfs.Directory, error) {
+-	f, err := os.OpenFile(path, os.O_RDWR, 0666)
+-	if err != nil {
+-		log.Printf("Warning: Couldn't open ISO in RW mode, trying RO mode")
+-		f, err = os.Open(path)
+-		if err != nil {
+-			return nil, nil, nil, fmt.Errorf("error opening ISO: %v", err)
+-		}
+-	}
+-	driverDir, err := iso.NewIsoDriver(f)
+-	if err != nil {
+-		f.Close()
+-		return nil, nil, nil, err
+-	}
+-	gameDir, err := toc.NewTableOfContent(driverDir)
+-	return f, driverDir, gameDir, err
+-}
++func setupISODriver(path string) (io.Closer, vfs.Directory, vfs.Directory, error) {
++	f := vfs.NewDirectoryDriverFile(path)
++	if err := f.Open(false); err != nil {
++		log.Printf("Warning: Couldn't open ISO in RW mode, trying RO mode")
++		f = vfs.NewDirectoryDriverFile(path)
++		if err := f.Open(true); err != nil {
++			return nil, nil, nil, fmt.Errorf("error opening ISO: %v", err)
++		}
++	}
++	driverDir, err := iso.NewIsoDriver(f)
++	if err != nil {
++		f.Close()
++		return nil, nil, nil, err
++	}
++	gameDir, err := toc.NewTableOfContent(driverDir)
++	if err != nil {
++		f.Close()
++		return nil, nil, nil, err
++	}
++	return f, driverDir, gameDir, nil
++}
