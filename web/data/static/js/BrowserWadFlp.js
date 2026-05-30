@@ -106,7 +106,7 @@ gowFlp.prototype.cacheTexture = function(texture_name) {
         let texture;
         if (this.root.Textures[texture_name].Images.length) {
             let img = this.root.Textures[texture_name].Images[0].Image;
-            texture = new RenderTexture('data:image/png;base64,' + img);
+            texture = new grTexture('data:image/png;base64,' + img);
             texture.markAsFontTexture();
         } else {
             texture = gr_instance.emptyTexture;
@@ -121,7 +121,7 @@ gowFlp.prototype.renderData2 = function(o, handler, frameIndex, transform, color
         return [];
     }
 
-    let model = new RenderModel();
+    let model = new grModel();
 
     // console.log("MESH PART INDEX", o.MeshPartIndex);
     meshes = loadMeshPartFromAjax(model, this.root.Model.Meshes[0], o.MeshPartIndex);
@@ -138,8 +138,8 @@ gowFlp.prototype.renderData2 = function(o, handler, frameIndex, transform, color
     if (o.Materials && o.Materials.length !== 0) {
         for (let iMaterial in o.Materials) {
             let flpMaterial = o.Materials[iMaterial];
-            let material = new RenderMaterial();
-            let layer = new RenderMaterialLayer();
+            let material = new grMaterial();
+            let layer = new grMaterialLayer();
             if (flpMaterial.TextureName) {
                 layer.setTextures([this.cacheTexture(flpMaterial.TextureName)]);
             }
@@ -156,11 +156,10 @@ gowFlp.prototype.renderData2 = function(o, handler, frameIndex, transform, color
 
     // console.log("rendered data2 ", o, handler, transform.pos, transform.Matrix, color);
 
-    let node = new ObjectTreeNodeModel("flp_data2", model);
-    node.setLocalMatrix(transform.toMatrix3d());
+    model.matrix = transform.toMatrix3d();
 
     // console.log("MODELS FROM DATA2", [model]);
-    return [node];
+    return [model];
 }
 
 gowFlp.prototype.renderData4 = function(o, handler, frameIndex, transform, color) {
@@ -276,8 +275,6 @@ gowFlp.prototype.renderElementByHandler = function(handler, frameIndex, transfor
             return this.renderData2(o, handler, frameIndex, transform, color);
         case 4:
             return this.renderData4(o, handler, frameIndex, transform, color);
-        case 5:
-            return []; // TODO: render for text
         case 6:
             return this.renderData6sub1(o.Sub1, handler, frameIndex, transform, color);
         case 7:
@@ -313,20 +310,6 @@ function summaryLoadWadFlp(flp, wad, tagid) {
             uploadAjaxHandler.call(this);
         });
         dataSummary.append($('<p>').append(uploadJSON));
-
-        let downloadFontJSON = $('<button>').text("Download font as json").click(function() {
-            window.open(getActionLinkForWadNode(wad, tagid, 'exportfont'), '_blank');
-        });
-        dataSummary.append($('<p>').append(downloadFontJSON));
-
-
-        let replaceFontJSON = $('<button>').text("Replace font from json");
-        replaceFontJSON.attr("href", getActionLinkForWadNode(wad, tagid, 'replacefont'));
-        replaceFontJSON.click(function() {
-            console.log($(this).attr('href'));
-            uploadAjaxHandler.call(this);
-        });
-        dataSummary.append($('<p>').append(replaceFontJSON));
 
         let showDump = $('<button>').text("Expand dump").click(function() {
             $(this).attr("disabled", true);
@@ -751,7 +734,7 @@ function summaryLoadWadFlp(flp, wad, tagid) {
                     _column("<b>" + obj.MeshPartIndex + "</b><br><sub>You can open related MDL_%flpname% resource and check this object part (mesh that index starts with o_" + obj.MeshPartIndex + "_g0_...) </sub>")));
                 let $materials = [];
                 for (let i in obj.Materials) {
-                    // console.log(obj.Materials, obj, flp);
+                    console.log(obj.Materials, obj, flp);
                     let mat = obj.Materials[i];
                     let $mat = $("<div>");
                     $mat.append("Color: <b>0x" + mat.Color.toString(16) + "</b><br>");
@@ -977,7 +960,7 @@ function summaryLoadWadFlp(flp, wad, tagid) {
 
         let charstable = $("<table>");
 
-        let mdl = new RenderModel();
+        let mdl = new grModel();
         let matmap = {};
 
         for (let iFont in flpdata.Fonts) {
@@ -1017,12 +1000,12 @@ function summaryLoadWadFlp(flp, wad, tagid) {
                             flp.Textures[txr_name].Images[0].hasOwnProperty('Image')) {
                             let img = flp.Textures[txr_name].Images[0].Image;
 
-                            let material = new RenderMaterial();
+                            let material = new grMaterial();
 
-                            let texture = new RenderTexture('data:image/png;base64,' + img);
+                            let texture = new grTexture('data:image/png;base64,' + img);
                             texture.markAsFontTexture();
 
-                            let layer = new RenderMaterialLayer();
+                            let layer = new grMaterialLayer();
                             layer.setTextures([texture]);
                             material.addLayer(layer);
 
@@ -1037,7 +1020,7 @@ function summaryLoadWadFlp(flp, wad, tagid) {
                 }
 
                 let symbolWidth = font.SymbolWidths[glyphId];
-                let cubemesh = RenderHelper.CubeLinesMesh(symbolWidth / 32, 0, 0, symbolWidth / 32, 500, 5, false);
+                let cubemesh = grHelper_CubeLines(symbolWidth / 32, 0, 0, symbolWidth / 32, 500, 5, false);
                 mdl.addMesh(cubemesh);
                 meshes.push(cubemesh);
 
@@ -1073,7 +1056,7 @@ function summaryLoadWadFlp(flp, wad, tagid) {
         }
 
         dataSummary.append(charstable);
-        gr_instance.addNode(new ObjectTreeNodeModel("flp_font", mdl));
+        gr_instance.models.push(mdl);
         gr_instance.requestRedraw();
     }
 
@@ -1128,9 +1111,7 @@ function summaryLoadWadFlp(flp, wad, tagid) {
             gr_instance.cleanup();
 
             let elementsRenderModels = f.renderElementByHandler(object_renderer_handler, object_renderer_frame);
-            for (const node of elementsRenderModels) {
-                gr_instance.addNode(node);
-            }
+            gr_instance.models = gr_instance.models.concat(elementsRenderModels);
             // console.log("Rendered frame", frame);
 
             gr_instance.flushScene();
@@ -1161,370 +1142,678 @@ function summaryLoadWadFlp(flp, wad, tagid) {
 
         renderFrame();
     }
-        let flp_hud_stage_editor = function() {
-            set3dVisible(false);
-            gr_instance.cleanup();
-            dataSummary.empty();
 
-            let state = {
-                timeline: 'root',
-                frame: 0,
-                zoom: 1.0,
-                invertY: true,
-                cloneTransformOnDrag: true,
-                selectedKey: null,
-                selectedItem: null,
-                visibleItems: [],
-                drag: null,
-                patchLog: [],
-            };
 
-            let imageCache = {};
 
-            function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
-            function n(v, def) { v = Number.parseFloat(v); return Number.isFinite(v) ? v : def; }
-            function handlerName(h) {
-                if (!h) { return 'null handler'; }
-                let name = (objNamesArray && objNamesArray[h.TypeArrayId]) ? objNamesArray[h.TypeArrayId] : ('Type ' + h.TypeArrayId);
-                return name + '[' + h.IdInThatTypeArray + ']';
-            }
-            function getHandlerObjSafe(h) {
-                if (!h) { return undefined; }
-                if (h.TypeArrayId == 8) { return flpdata.Data8; }
-                let arr = get_obj_arr_by_id(h.TypeArrayId);
-                if (!arr) { return undefined; }
-                return arr[h.IdInThatTypeArray];
-            }
-            function transformName(id) { return 'Transform[' + id + ']'; }
-            function colorName(id) { return 'Color[' + id + ']'; }
-            function timelineOptions() {
-                let out = [{ id: 'root', label: 'ROOT / Data8', handler: { TypeArrayId: 8, IdInThatTypeArray: 0 }, node: flpdata.Data8 }];
-                for (let i = 0; i < flpdata.Datas7.length; i++) {
-                    out.push({ id: 'd7:' + i, label: 'Datas7[' + i + ']', handler: { TypeArrayId: 7, IdInThatTypeArray: i }, node: flpdata.Datas7[i] });
-                }
-                for (let i = 0; i < flpdata.Datas6.length; i++) {
-                    out.push({ id: 'd6:' + i, label: 'Datas6[' + i + '].Sub1', handler: { TypeArrayId: 6, IdInThatTypeArray: i }, node: flpdata.Datas6[i].Sub1 });
-                }
-                return out;
-            }
-            function currentTimeline() {
-                let opts = timelineOptions();
-                for (let o of opts) { if (o.id == state.timeline) { return o; } }
-                return opts[0];
-            }
-            function identityTransform() { return { x: 0, y: 0, a: 1, b: 0, c: 0, d: 1 }; }
-            function compose2d(parent, t) {
-                if (!t) { return parent; }
-                let m = t.Matrix || [1, 0, 0, 1];
-                let ox = n(t.OffsetX, 0), oy = n(t.OffsetY, 0);
-                return {
-                    a: parent.a * m[0] + parent.c * m[1],
-                    b: parent.b * m[0] + parent.d * m[1],
-                    c: parent.a * m[2] + parent.c * m[3],
-                    d: parent.b * m[2] + parent.d * m[3],
-                    x: parent.x + parent.a * ox + parent.c * oy,
-                    y: parent.y + parent.b * ox + parent.d * oy,
-                };
-            }
-            function composeColor(parent, colorId) {
-                let c = flpdata.BlendColors[colorId];
-                if (!c || !c.Color) { return parent.slice(); }
-                return [parent[0] * (c.Color[0] / 256.0), parent[1] * (c.Color[1] / 256.0), parent[2] * (c.Color[2] / 256.0), parent[3] * (c.Color[3] / 256.0)];
-            }
-            function keyForItem(path, elemIndex, keyIndex) { return path + '/e' + elemIndex + '/k' + keyIndex; }
-            function currentKeyFrame(anim, frame) {
-                if (!anim || !anim.KeyFrames || anim.KeyFrames.length == 0) { return null; }
-                for (let i = 0; i < anim.KeyFrames.length; i++) {
-                    if (frame <= anim.KeyFrames[i].WhenThisFrameEnds) { return { key: anim.KeyFrames[i], index: i }; }
-                }
-                return { key: anim.KeyFrames[anim.KeyFrames.length - 1], index: anim.KeyFrames.length - 1 };
-            }
-            function firstTextureNameForHandler(h) {
-                let obj = getHandlerObjSafe(h);
-                if (!obj) { return ''; }
-                if (h.TypeArrayId == 1 && obj.Materials) {
-                    for (let mat of obj.Materials) { if (mat.TextureName) { return mat.TextureName; } }
-                }
-                return '';
-            }
-            function getTextureImage(name) {
-                if (!name || !flp.Textures || !flp.Textures[name] || !flp.Textures[name].Images || !flp.Textures[name].Images.length) { return null; }
-                if (!imageCache[name]) {
-                    let img = new Image();
-                    img.src = 'data:image/png;base64,' + flp.Textures[name].Images[0].Image;
-                    imageCache[name] = img;
-                }
-                return imageCache[name];
-            }
-            function getDisplayLabel(h, key) {
-                let obj = getHandlerObjSafe(h);
-                if (!obj) { return handlerName(h); }
-                if (h.TypeArrayId == 1) {
-                    let tx = firstTextureNameForHandler(h);
-                    return 'MeshPart ' + obj.MeshPartIndex + (tx ? ' / ' + tx : '');
-                }
-                if (h.TypeArrayId == 5) { return 'DynLabel ' + (obj.ValueName || obj.Placeholder || h.IdInThatTypeArray); }
-                if (h.TypeArrayId == 4) { return 'StaticLabel ' + h.IdInThatTypeArray; }
-                if (h.TypeArrayId == 6 || h.TypeArrayId == 7 || h.TypeArrayId == 8) { return handlerName(h) + ' timeline'; }
-                return key && key.Name ? key.Name : handlerName(h);
-            }
-            function collectItemsFromTimeline(node, handler, frame, parentTransform, parentColor, path, depth) {
-                let out = [];
-                if (!node || !node.ElementsAnimation || depth > 12) { return out; }
-                for (let i = 0; i < node.ElementsAnimation.length; i++) {
-                    let anim = node.ElementsAnimation[i];
-                    let kf = currentKeyFrame(anim, frame);
-                    if (!kf || !kf.key) { continue; }
-                    let key = kf.key;
-                    let worldT = compose2d(parentTransform, flpdata.Transformations[key.TransformationId]);
-                    let worldC = composeColor(parentColor, key.ColorId);
-                    let item = { id: keyForItem(path, i, kf.index), path: path, elementIndex: i, keyIndex: kf.index, parentHandler: handler, keyFrame: key, elementHandler: key.ElementHandler, transformId: key.TransformationId, colorId: key.ColorId, world: worldT, color: worldC, label: getDisplayLabel(key.ElementHandler, key), depth: depth };
-                    out.push(item);
-                    let child = getHandlerObjSafe(key.ElementHandler);
-                    if (key.ElementHandler.TypeArrayId == 6 && child && child.Sub1) {
-                        out = out.concat(collectItemsFromTimeline(child.Sub1, key.ElementHandler, frame, worldT, worldC, item.id, depth + 1));
-                    } else if ((key.ElementHandler.TypeArrayId == 7 || key.ElementHandler.TypeArrayId == 8) && child) {
-                        out = out.concat(collectItemsFromTimeline(child, key.ElementHandler, frame, worldT, worldC, item.id, depth + 1));
-                    }
-                }
-                return out;
-            }
-            function collectVisibleItems() {
-                let tl = currentTimeline();
-                state.visibleItems = collectItemsFromTimeline(tl.node, tl.handler, state.frame, identityTransform(), [1, 1, 1, 1], tl.id, 0);
-                if (state.selectedKey && !state.visibleItems.find(i => i.id == state.selectedKey)) { state.selectedKey = null; state.selectedItem = null; }
-                if (state.selectedKey) { state.selectedItem = state.visibleItems.find(i => i.id == state.selectedKey); }
-            }
-            function transformUsageCount(transformId) {
-                let count = 0;
-                function scanNode(node) {
-                    if (!node || !node.ElementsAnimation) { return; }
-                    for (let anim of node.ElementsAnimation) { for (let k of anim.KeyFrames) { if (k.TransformationId == transformId) { count++; } } }
-                }
-                for (let d of flpdata.Datas6) { scanNode(d.Sub1); }
-                for (let d of flpdata.Datas7) { scanNode(d); }
-                scanNode(flpdata.Data8);
-                return count;
-            }
-            function cloneTransformForSelected() {
-                if (!state.selectedItem) { return; }
-                let key = state.selectedItem.keyFrame;
-                let oldId = key.TransformationId;
-                let src = flpdata.Transformations[oldId];
-                if (!src) { return; }
-                flpdata.Transformations.push(JSON.parse(JSON.stringify(src)));
-                key.TransformationId = flpdata.Transformations.length - 1;
-                state.selectedItem.transformId = key.TransformationId;
-                state.patchLog.push('clone transform ' + oldId + ' -> ' + key.TransformationId + ' for ' + state.selectedItem.id);
-            }
-            function ensureEditableTransformForSelected() {
-                if (state.selectedItem && state.cloneTransformOnDrag && transformUsageCount(state.selectedItem.transformId) > 1) { cloneTransformForSelected(); }
-            }
-            function canvasToWorld(canvas, x, y) {
-                let rect = canvas.getBoundingClientRect();
-                let cx = (x - rect.left) * (canvas.width / rect.width);
-                let cy = (y - rect.top) * (canvas.height / rect.height);
-                let wx = (cx - canvas.width / 2) / state.zoom;
-                let wy = (cy - canvas.height / 2) / state.zoom;
-                if (state.invertY) { wy = -wy; }
-                return { x: wx, y: wy };
-            }
-            function worldToCanvas(canvas, x, y) {
-                let cy = state.invertY ? -y : y;
-                return { x: canvas.width / 2 + x * state.zoom, y: canvas.height / 2 + cy * state.zoom };
-            }
-            function itemSize(it) {
-                let t = it.elementHandler.TypeArrayId;
-                if (t == 5) { return { w: 160, h: 28 }; }
-                if (t == 4) { return { w: 130, h: 28 }; }
-                if (t == 6 || t == 7 || t == 8) { return { w: 95, h: 34 }; }
-                return { w: 70, h: 40 };
-            }
-            function hitTest(canvas, ev) {
-                let rect = canvas.getBoundingClientRect();
-                let x = (ev.clientX - rect.left) * (canvas.width / rect.width);
-                let y = (ev.clientY - rect.top) * (canvas.height / rect.height);
-                for (let i = state.visibleItems.length - 1; i >= 0; i--) {
-                    let it = state.visibleItems[i];
-                    let p = worldToCanvas(canvas, it.world.x, it.world.y);
-                    let s = itemSize(it);
-                    if (x >= p.x - s.w / 2 && x <= p.x + s.w / 2 && y >= p.y - s.h / 2 && y <= p.y + s.h / 2) { return it; }
-                }
-                return null;
-            }
-            function drawStage() {
-                collectVisibleItems();
-                let canvas = $('#flp-hud-stage')[0];
-                if (!canvas) { return; }
-                let ctx = canvas.getContext('2d');
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.fillStyle = '#3c3f41';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                ctx.strokeStyle = 'rgba(255,0,0,.55)'; ctx.beginPath(); ctx.moveTo(0, canvas.height / 2); ctx.lineTo(canvas.width, canvas.height / 2); ctx.stroke();
-                ctx.strokeStyle = 'rgba(0,255,80,.55)'; ctx.beginPath(); ctx.moveTo(canvas.width / 2, 0); ctx.lineTo(canvas.width / 2, canvas.height); ctx.stroke();
-                ctx.font = '12px monospace'; ctx.textBaseline = 'top';
-                for (let it of state.visibleItems) {
-                    let p = worldToCanvas(canvas, it.world.x, it.world.y);
-                    let sz = itemSize(it);
-                    let rgba = 'rgba(' + Math.round(clamp(it.color[0], 0, 1) * 255) + ',' + Math.round(clamp(it.color[1], 0, 1) * 255) + ',' + Math.round(clamp(it.color[2], 0, 1) * 255) + ',' + clamp(it.color[3], 0.15, 1) + ')';
-                    let selected = state.selectedKey == it.id;
-                    ctx.save(); ctx.translate(p.x, p.y);
-                    ctx.strokeStyle = selected ? '#ffff00' : 'rgba(255,255,255,.65)'; ctx.lineWidth = selected ? 3 : 1; ctx.fillStyle = rgba;
-                    let img = getTextureImage(firstTextureNameForHandler(it.elementHandler));
-                    if (img && img.complete && it.elementHandler.TypeArrayId == 1) { ctx.globalAlpha = clamp(it.color[3], 0.25, 1); ctx.drawImage(img, -sz.w / 2, -sz.h / 2, sz.w, sz.h); ctx.globalAlpha = 1; } else { ctx.fillRect(-sz.w / 2, -sz.h / 2, sz.w, sz.h); }
-                    ctx.strokeRect(-sz.w / 2, -sz.h / 2, sz.w, sz.h);
-                    ctx.fillStyle = selected ? '#ffff00' : '#ffffff'; ctx.fillText(it.label.substring(0, 32), -sz.w / 2 + 3, -sz.h / 2 + 3);
-                    ctx.restore();
-                }
-                renderElementList(); renderInspector();
-            }
-            function renderElementList() {
-                let list = $('#flp-hud-elements').empty();
-                for (let it of state.visibleItems) {
-                    let row = $('<div>').css({ padding: '4px', cursor: 'pointer', borderBottom: '1px solid #222', color: state.selectedKey == it.id ? '#ffff80' : '#ddd' });
-                    row.text(it.id + ' | ' + it.label + ' | ' + transformName(it.transformId) + ' | ' + colorName(it.colorId));
-                    row.click(function() { state.selectedKey = it.id; state.selectedItem = it; drawStage(); });
-                    list.append(row);
-                }
-            }
-            function renderInspector() {
-                let box = $('#flp-hud-inspector').empty();
-                if (!state.selectedItem) { box.text('Selecione um elemento no stage/lista.'); return; }
-                let it = state.selectedItem, key = it.keyFrame;
-                let tr = flpdata.Transformations[key.TransformationId];
-                let col = flpdata.BlendColors[key.ColorId];
-                function inputRow(label, input) { return $('<div>').css({ margin: '4px 0' }).append($('<label>').css({ display: 'inline-block', width: '130px' }).text(label), input); }
-                box.append($('<h3>').text(it.label), $('<div>').text('Handler: ' + handlerName(key.ElementHandler)), $('<div>').text('Keyframe: ' + it.id), $('<div>').text('Uso do transform: ' + transformUsageCount(key.TransformationId) + ' keyframe(s)'));
-                box.append(inputRow('Name', $('<input type="text">').val(key.Name || '').on('change', function() { key.Name = this.value; state.patchLog.push('set key name ' + it.id); })));
-                box.append(inputRow('Frame end', $('<input type="number">').val(key.WhenThisFrameEnds).on('change', function() { key.WhenThisFrameEnds = Number.parseInt(this.value) || 0; state.patchLog.push('set frame end ' + it.id); drawStage(); })));
-                box.append(inputRow('TransformId', $('<input type="number">').val(key.TransformationId).on('change', function() { key.TransformationId = clamp(Number.parseInt(this.value) || 0, 0, flpdata.Transformations.length - 1); state.patchLog.push('set transform id ' + it.id); drawStage(); })));
-                box.append(inputRow('ColorId', $('<input type="number">').val(key.ColorId).on('change', function() { key.ColorId = clamp(Number.parseInt(this.value) || 0, 0, flpdata.BlendColors.length - 1); state.patchLog.push('set color id ' + it.id); drawStage(); })));
-                if (tr) {
-                    box.append(inputRow('OffsetX', $('<input type="number" step="0.0625">').val(tr.OffsetX).on('change', function() { tr.OffsetX = n(this.value, tr.OffsetX); state.patchLog.push('set OffsetX ' + key.TransformationId); drawStage(); })));
-                    box.append(inputRow('OffsetY', $('<input type="number" step="0.0625">').val(tr.OffsetY).on('change', function() { tr.OffsetY = n(this.value, tr.OffsetY); state.patchLog.push('set OffsetY ' + key.TransformationId); drawStage(); })));
-                    box.append(inputRow('Matrix[4]', $('<textarea>').css({ width: '95%', height: '70px' }).val(JSON.stringify(tr.Matrix)).on('change', function() { try { let m = JSON.parse(this.value); if (m.length == 4) { tr.Matrix = m.map(Number); state.patchLog.push('set matrix ' + key.TransformationId); drawStage(); } } catch (e) { alert('Matrix JSON inválida: ' + e); } })));
-                    box.append($('<button>').text('Clone transform agora').click(function() { cloneTransformForSelected(); drawStage(); }));
-                }
-                if (col && col.Color) {
-                    let colorLine = $('<div>').css({ marginTop: '8px' }).append('RGBA 0..256: ');
-                    for (let i = 0; i < 4; i++) { colorLine.append($('<input type="number" min="0" max="256">').css({ width: '55px' }).val(col.Color[i]).on('change', function() { col.Color[i] = clamp(Number.parseInt(this.value) || 0, 0, 256); state.patchLog.push('set color ' + key.ColorId); drawStage(); })); }
-                    box.append(colorLine);
-                }
-            }
-            function collectScripts() {
-                let out = [];
-                function addScript(label, s) { if (s && s.Decompiled) { out.push({ label: label, script: s }); } }
-                function scanSub1(prefix, node) {
-                    if (!node || !node.FrameScriptLables) { return; }
-                    for (let i = 0; i < node.FrameScriptLables.length; i++) {
-                        let lbl = node.FrameScriptLables[i];
-                        for (let j = 0; j < lbl.Subs.length; j++) { addScript(prefix + '.FrameScriptLables[' + i + '] ' + (lbl.LabelName || '') + '.Subs[' + j + ']', lbl.Subs[j].Script); }
-                    }
-                }
-                for (let i = 0; i < flpdata.Datas6.length; i++) { scanSub1('Datas6[' + i + '].Sub1', flpdata.Datas6[i].Sub1); for (let j = 0; j < flpdata.Datas6[i].Sub2s.length; j++) { addScript('Datas6[' + i + '].Sub2s[' + j + '] event', flpdata.Datas6[i].Sub2s[j].Script); } }
-                for (let i = 0; i < flpdata.Datas7.length; i++) { scanSub1('Datas7[' + i + ']', flpdata.Datas7[i]); }
-                scanSub1('Data8 ROOT', flpdata.Data8);
-                return out;
-            }
-            function renderScriptEditor(container) {
-                container.empty();
-                let scripts = collectScripts();
-                let sel = $('<select>').css({ width: '100%' });
-                for (let i = 0; i < scripts.length; i++) { sel.append($('<option>').val(i).text(i + ' | ' + scripts[i].label)); }
-                let area = $('<textarea>').css({ width: '100%', height: '330px', fontFamily: 'monospace' });
-                function load() { let s = scripts[Number.parseInt(sel.val())]; area.val(s ? s.script.Decompiled.join('\n') : ''); }
-                sel.on('change', load);
-                area.on('change', function() { let s = scripts[Number.parseInt(sel.val())]; if (s) { s.script.Decompiled = area.val().split(/\r?\n/).filter(x => x.trim().length); state.patchLog.push('edit script ' + s.label); } });
-                let ops = $('<div>').css({ margin: '6px 0' });
-                ['00: end', 'Play', 'Stop', 'GotoFrame ', 'GotoLabel ', 'CallFrame ', 'push_string ""'].forEach(function(op) { ops.append($('<button>').text(op).click(function() { area.val(area.val() + (area.val().endsWith('\n') ? '' : '\n') + op); area.trigger('change'); })); });
-                container.append($('<h3>').text('Scripts / Decompiled opcodes'), sel, ops, area);
-                load();
-            }
-            function renderDynamicLabels(container) {
-                container.empty();
-                let table = $('<table>').css({ width: '100%' });
-                table.append($('<tr>').append('<th>ID</th><th>ValueName</th><th>Placeholder</th><th>FontHandler</th><th>Width1</th><th>BlendColor ARGB</th><th>Limit</th>'));
-                for (let i = 0; i < flpdata.DynamicLabels.length; i++) {
-                    let d = flpdata.DynamicLabels[i];
-                    function inp(prop, width) { return $('<input>').css({ width: width || '120px' }).val(d[prop]).on('change', function() { d[prop] = (typeof d[prop] == 'number') ? Number.parseInt(this.value) || 0 : this.value; state.patchLog.push('edit DynamicLabels[' + i + '].' + prop); }); }
-                    table.append($('<tr>').append($('<td>').text(i), $('<td>').append(inp('ValueName')), $('<td>').append(inp('Placeholder')), $('<td>').append(inp('FontHandler', '70px')), $('<td>').append(inp('Width1', '70px')), $('<td>').append(inp('BlendColor', '100px')), $('<td>').append(inp('StringLengthLimit', '70px'))));
-                }
-                container.append($('<h3>').text('DynamicLabels'), table);
-            }
-            function renderColors(container) {
-                container.empty();
-                let table = $('<table>').css({ width: '100%' });
-                table.append($('<tr>').append('<th>ID</th><th>Preview</th><th>R</th><th>G</th><th>B</th><th>A</th>'));
-                for (let i = 0; i < flpdata.BlendColors.length; i++) {
-                    let c = flpdata.BlendColors[i];
-                    let prev = $('<div>').css({ width: '36px', height: '18px', border: '1px solid #888', background: 'rgba(' + c.Color[0] / 256 * 255 + ',' + c.Color[1] / 256 * 255 + ',' + c.Color[2] / 256 * 255 + ',' + c.Color[3] / 256 + ')' });
-                    let row = $('<tr>').append($('<td>').text(i), $('<td>').append(prev));
-                    for (let k = 0; k < 4; k++) { row.append($('<td>').append($('<input type="number" min="0" max="256">').css({ width: '60px' }).val(c.Color[k]).on('change', function() { c.Color[k] = clamp(Number.parseInt(this.value) || 0, 0, 256); state.patchLog.push('edit BlendColors[' + i + ']'); renderColors(container); drawStage(); }))); }
-                    table.append(row);
-                }
-                container.append($('<h3>').text('BlendColors'), table);
-            }
-            function validateFlp() {
-                let problems = [];
-                function checkHandler(h, where) {
-                    if (!h) { problems.push(where + ': handler vazio'); return; }
-                    if (h.TypeArrayId == 8) { return; }
-                    let arr = get_obj_arr_by_id(h.TypeArrayId);
-                    if (!arr) { problems.push(where + ': TypeArrayId desconhecido ' + h.TypeArrayId); return; }
-                    if (h.IdInThatTypeArray < 0 || h.IdInThatTypeArray >= arr.length) { problems.push(where + ': IdInThatTypeArray fora do limite ' + h.IdInThatTypeArray); }
-                }
-                function scanNode(prefix, node) {
-                    if (!node || !node.ElementsAnimation) { return; }
-                    for (let i = 0; i < node.ElementsAnimation.length; i++) { let anim = node.ElementsAnimation[i]; for (let j = 0; j < anim.KeyFrames.length; j++) { let k = anim.KeyFrames[j]; checkHandler(k.ElementHandler, prefix + '.ElementsAnimation[' + i + '].KeyFrames[' + j + ']'); if (k.TransformationId >= flpdata.Transformations.length) { problems.push(prefix + ' keyframe transform fora do limite: ' + k.TransformationId); } if (k.ColorId >= flpdata.BlendColors.length) { problems.push(prefix + ' keyframe color fora do limite: ' + k.ColorId); } } }
-                }
-                for (let i = 0; i < flpdata.GlobalHandlersIndexes.length; i++) { checkHandler(flpdata.GlobalHandlersIndexes[i], 'GlobalHandlersIndexes[' + i + ']'); }
-                for (let i = 0; i < flpdata.Datas6.length; i++) { scanNode('Datas6[' + i + '].Sub1', flpdata.Datas6[i].Sub1); }
-                for (let i = 0; i < flpdata.Datas7.length; i++) { scanNode('Datas7[' + i + ']', flpdata.Datas7[i]); }
-                scanNode('Data8', flpdata.Data8);
-                for (let s of collectScripts()) { let lines = s.script.Decompiled || []; if (!lines.length || !String(lines[lines.length - 1]).toLowerCase().includes('end')) { problems.push('Script talvez sem end: ' + s.label); } }
-                return problems;
-            }
-            function downloadEditedJson() {
-                let blob = new Blob([JSON.stringify(flpdata, null, 2)], { type: 'application/json' });
-                let a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'FLP_edited.json'; a.click(); setTimeout(function() { URL.revokeObjectURL(a.href); }, 500);
-            }
-            function uploadEditedJson() {
-                if (!confirm('Enviar JSON editado para fromjson e repackar o FLP no WAD? Faça backup antes.')) { return; }
-                let fd = new FormData();
-                fd.append('data', new Blob([JSON.stringify(flpdata, null, 2)], { type: 'application/json' }), 'FLP_edited.json');
-                $.ajax({ url: getActionLinkForWadNode(wad, tagid, 'fromjson'), method: 'POST', data: fd, processData: false, contentType: false, success: function(a) { if (a != '' && a.error) { alert('Erro no fromjson: ' + a.error); } else { alert('FLP atualizado com sucesso. Reabra o node para recarregar.'); } }, error: function(xhr) { alert('Falha HTTP: ' + xhr.status + ' ' + xhr.responseText); } });
-            }
+    let flp_hud_stage_editor = function() {
+        set3dVisible(false);
+        dataSummary.empty();
 
-            let root = $('<div id="flp-hud-editor">').css({ display: 'grid', gridTemplateColumns: 'minmax(600px, 1fr) 430px', gap: '8px', padding: '6px' });
-            let left = $('<div>'); let right = $('<div>').css({ maxHeight: '76vh', overflow: 'auto' }); let toolbar = $('<div>').css({ marginBottom: '6px' });
-            let timelineSel = $('<select>');
-            for (let o of timelineOptions()) { timelineSel.append($('<option>').val(o.id).text(o.label)); }
-            let frameSlider = $('<input type="range" min="0" value="0">').css({ width: '220px' }).on('input', function() { state.frame = Number.parseInt(this.value) || 0; $('#flp-hud-frame-label').text(state.frame); drawStage(); });
-            function updateFrameMax() { let tl = currentTimeline(); let max = tl.node && tl.node.TotalFramesCount ? tl.node.TotalFramesCount - 1 : 0; frameSlider.attr('max', Math.max(0, max)); }
-            timelineSel.val(state.timeline).on('change', function() { state.timeline = this.value; state.frame = 0; frameSlider.val(0); updateFrameMax(); drawStage(); });
-            let zoomInput = $('<input type="number" step="0.1" min="0.1">').css({ width: '70px' }).val(state.zoom).on('change', function() { state.zoom = Math.max(0.1, n(this.value, 1)); drawStage(); });
-            let cloneCheck = $('<input type="checkbox">').prop('checked', state.cloneTransformOnDrag).on('change', function() { state.cloneTransformOnDrag = this.checked; });
-            let invertCheck = $('<input type="checkbox">').prop('checked', state.invertY).on('change', function() { state.invertY = this.checked; drawStage(); });
-            toolbar.append('Timeline ', timelineSel, ' Frame ', frameSlider, ' <span id="flp-hud-frame-label">0</span> ', ' Zoom ', zoomInput, $('<label>').append(cloneCheck, ' clone transform ao arrastar'), $('<label>').css({ marginLeft: '8px' }).append(invertCheck, ' inverter Y'));
-            let canvas = $('<canvas id="flp-hud-stage" width="960" height="540">').css({ width: '100%', border: '1px solid #111', background: '#3c3f41', cursor: 'crosshair' });
-            canvas.on('mousedown', function(ev) { let it = hitTest(this, ev); if (!it) { return; } state.selectedKey = it.id; state.selectedItem = it; ensureEditableTransformForSelected(); let p = canvasToWorld(this, ev.clientX, ev.clientY); let tr = flpdata.Transformations[state.selectedItem.keyFrame.TransformationId]; state.drag = { start: p, origX: tr.OffsetX, origY: tr.OffsetY }; drawStage(); });
-            canvas.on('mousemove', function(ev) { if (!state.drag || !state.selectedItem) { return; } let p = canvasToWorld(this, ev.clientX, ev.clientY); let tr = flpdata.Transformations[state.selectedItem.keyFrame.TransformationId]; tr.OffsetX = state.drag.origX + (p.x - state.drag.start.x); tr.OffsetY = state.drag.origY + (p.y - state.drag.start.y); drawStage(); });
-            $(document).on('mouseup.flphud', function() { if (state.drag && state.selectedItem) { state.patchLog.push('drag ' + state.selectedItem.id); } state.drag = null; });
-            let tabs = $('<div>').css({ marginTop: '6px' }); let content = $('<div>').css({ border: '1px solid #333', padding: '6px', minHeight: '160px' });
-            function tabButton(name, fn) { return $('<button>').text(name).click(function() { content.empty(); fn(content); }); }
-            tabs.append(tabButton('Scripts', renderScriptEditor), tabButton('DynamicLabels', renderDynamicLabels), tabButton('BlendColors', renderColors), $('<button>').text('Validate').click(function() { let p = validateFlp(); content.empty().append($('<h3>').text('Validation'), $('<pre>').text(p.length ? p.join('\n') : 'OK - nenhum problema básico encontrado.')); }), $('<button>').text('Download edited FLP JSON').click(downloadEditedJson), $('<button>').text('Upload edited FLP JSON to WAD').click(uploadEditedJson), $('<button>').text('Render timeline no viewer 3D').click(function() { object_renderer_handler = currentTimeline().handler; flp_view_object_renderer(); }));
-            left.append(toolbar, canvas, $('<h3>').text('Elementos visíveis'), $('<div id="flp-hud-elements">').css({ maxHeight: '180px', overflow: 'auto', border: '1px solid #222' }), tabs, content);
-            right.append($('<h3>').text('Inspector'), $('<div id="flp-hud-inspector">'));
-            root.append(left, right); dataSummary.append(root); updateFrameMax(); drawStage();
+        const TYPE_NAMES = objNamesArray;
+        const state = {
+            timelineId: 'root',
+            frame: 0,
+            zoom: 1.0,
+            invertY: true,
+            cloneTransformOnDrag: true,
+            selectedKey: null,
+            selectedEntry: null,
+            filter: '',
+            tab: 'stage',
+            stageW: 960,
+            stageH: 540
+        };
+
+        const deepClone = function(v) {
+            return JSON.parse(JSON.stringify(v));
+        };
+
+        const asArray = function(v) {
+            return Array.isArray(v) ? v : [];
+        };
+
+        const safeNum = function(v, fallback) {
+            let n = Number.parseFloat(v);
+            return Number.isFinite(n) ? n : fallback;
+        };
+
+        const safeInt = function(v, fallback) {
+            let n = Number.parseInt(v);
+            return Number.isFinite(n) ? n : fallback;
+        };
+
+        const handlerToString = function(h) {
+            if (!h) {
+                return 'null handler';
+            }
+            let name = TYPE_NAMES[h.TypeArrayId] || ('Type' + h.TypeArrayId);
+            return name + '[' + h.IdInThatTypeArray + ']';
+        };
+
+        const getHandlerObject = function(h) {
+            return h ? get_obj_by_handler(h) : undefined;
+        };
+
+        const getTimelineOptions = function() {
+            let result = [];
+            if (flpdata.Data8 && flpdata.Data8.ElementsAnimation) {
+                result.push({ id: 'root', label: 'ROOT / Data8', handler: { TypeArrayId: 8, IdInThatTypeArray: 0 }, node: flpdata.Data8 });
+            }
+            for (let i = 0; i < asArray(flpdata.Datas7).length; i++) {
+                let n = flpdata.Datas7[i];
+                if (n && n.ElementsAnimation) {
+                    result.push({ id: 'd7:' + i, label: 'Datas7[' + i + '] frames=' + (n.TotalFramesCount || 1), handler: { TypeArrayId: 7, IdInThatTypeArray: i }, node: n });
+                }
+            }
+            for (let i = 0; i < asArray(flpdata.Datas6).length; i++) {
+                let n = flpdata.Datas6[i] && flpdata.Datas6[i].Sub1;
+                if (n && n.ElementsAnimation) {
+                    result.push({ id: 'd6:' + i, label: 'Datas6[' + i + '].Sub1 frames=' + (n.TotalFramesCount || 1), handler: { TypeArrayId: 6, IdInThatTypeArray: i }, node: n });
+                }
+            }
+            return result;
+        };
+
+        let timelines = getTimelineOptions();
+        if (timelines.length === 0) {
+            dataSummary.append($('<div class="flp-hud-panel">').text('Nenhuma timeline FLP com ElementsAnimation foi encontrada.'));
+            return;
         }
-    dataSummarySelectors.append($('<div class="item-selector">').click(flp_hud_stage_editor).text("HUD editor"));
+
+        const getTimeline = function() {
+            return timelines.find(function(t) { return t.id === state.timelineId; }) || timelines[0];
+        };
+
+        const getFrameMax = function() {
+            let tl = getTimeline().node;
+            return Math.max(0, (tl.TotalFramesCount || 1) - 1);
+        };
+
+        const getCurrentKeyFrame = function(element, frameIndex) {
+            let frames = asArray(element.KeyFrames);
+            if (frames.length === 0) {
+                return { frame: undefined, index: -1 };
+            }
+            for (let i = 0; i < frames.length; i++) {
+                if (frameIndex <= frames[i].WhenThisFrameEnds) {
+                    return { frame: frames[i], index: i };
+                }
+            }
+            return { frame: frames[frames.length - 1], index: frames.length - 1 };
+        };
+
+        const getTransformUsage = function() {
+            let usage = {};
+            const countTimeline = function(timeline) {
+                for (let i = 0; i < asArray(timeline.ElementsAnimation).length; i++) {
+                    let el = timeline.ElementsAnimation[i];
+                    for (let j = 0; j < asArray(el.KeyFrames).length; j++) {
+                        let id = el.KeyFrames[j].TransformationId;
+                        usage[id] = (usage[id] || 0) + 1;
+                    }
+                }
+            };
+            if (flpdata.Data8) countTimeline(flpdata.Data8);
+            for (let i = 0; i < asArray(flpdata.Datas7).length; i++) countTimeline(flpdata.Datas7[i]);
+            for (let i = 0; i < asArray(flpdata.Datas6).length; i++) if (flpdata.Datas6[i] && flpdata.Datas6[i].Sub1) countTimeline(flpdata.Datas6[i].Sub1);
+            return usage;
+        };
+
+        const ensureEditableTransform = function(entry) {
+            if (!entry || !entry.frame) {
+                return undefined;
+            }
+            let tid = entry.frame.TransformationId;
+            let t = flpdata.Transformations[tid];
+            if (!t) {
+                t = { Matrix: [1, 0, 0, 1], OffsetX: 0, OffsetY: 0 };
+                flpdata.Transformations.push(t);
+                entry.frame.TransformationId = flpdata.Transformations.length - 1;
+                return t;
+            }
+            if (state.cloneTransformOnDrag) {
+                let usage = getTransformUsage();
+                if ((usage[tid] || 0) > 1) {
+                    let nt = deepClone(t);
+                    flpdata.Transformations.push(nt);
+                    entry.frame.TransformationId = flpdata.Transformations.length - 1;
+                    t = nt;
+                    appendLog('Transform ' + tid + ' clonado para ' + entry.frame.TransformationId + ' antes da edição.');
+                }
+            }
+            return t;
+        };
+
+        const forceCloneSelectedTransform = function() {
+            if (!state.selectedEntry || !state.selectedEntry.frame) {
+                return;
+            }
+            let tid = state.selectedEntry.frame.TransformationId;
+            let t = flpdata.Transformations[tid] || { Matrix: [1, 0, 0, 1], OffsetX: 0, OffsetY: 0 };
+            flpdata.Transformations.push(deepClone(t));
+            state.selectedEntry.frame.TransformationId = flpdata.Transformations.length - 1;
+            appendLog('Transform ' + tid + ' clonado manualmente para ' + state.selectedEntry.frame.TransformationId + '.');
+            drawAll();
+        };
+
+        const colorToCss = function(colorId, alpha) {
+            let c = flpdata.BlendColors && flpdata.BlendColors[colorId] ? flpdata.BlendColors[colorId].Color : [256, 256, 256, 256];
+            let r = Math.max(0, Math.min(255, Math.round((c[0] / 256.0) * 255)));
+            let g = Math.max(0, Math.min(255, Math.round((c[1] / 256.0) * 255)));
+            let b = Math.max(0, Math.min(255, Math.round((c[2] / 256.0) * 255)));
+            let a = alpha === undefined ? Math.max(0.25, Math.min(1, c[3] / 256.0)) : alpha;
+            return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
+        };
+
+        const getElementLabel = function(entry) {
+            let h = entry.frame && entry.frame.ElementHandler;
+            if (!h) return 'empty';
+            let obj = getHandlerObject(h);
+            let prefix = handlerToString(h);
+            if (entry.frame.Name) {
+                prefix += ' .' + entry.frame.Name;
+            }
+            if (h.TypeArrayId === 1 && obj) {
+                return prefix + ' mesh=' + obj.MeshPartIndex;
+            }
+            if (h.TypeArrayId === 5 && obj) {
+                let pieces = [];
+                if (obj.Placeholder !== undefined) pieces.push('ph=' + obj.Placeholder);
+                if (obj.Text !== undefined) pieces.push('text=' + obj.Text);
+                if (obj.Width !== undefined) pieces.push('w=' + obj.Width);
+                return prefix + (pieces.length ? ' ' + pieces.join(' ') : '');
+            }
+            if ((h.TypeArrayId === 7 || h.TypeArrayId === 8 || h.TypeArrayId === 6) && obj) {
+                let total = obj.TotalFramesCount || (obj.Sub1 && obj.Sub1.TotalFramesCount) || 1;
+                return prefix + ' frames=' + total;
+            }
+            return prefix;
+        };
+
+        const getVisibleEntries = function() {
+            let tl = getTimeline().node;
+            let entries = [];
+            let filter = state.filter.toLowerCase();
+            for (let i = 0; i < asArray(tl.ElementsAnimation).length; i++) {
+                let element = tl.ElementsAnimation[i];
+                let kf = getCurrentKeyFrame(element, state.frame);
+                if (!kf.frame) continue;
+                let h = kf.frame.ElementHandler;
+                if (!h || h.TypeArrayId === 0) continue;
+                let label = getElementLabel({ frame: kf.frame, element: element });
+                if (filter && label.toLowerCase().indexOf(filter) < 0) continue;
+                entries.push({ key: i + ':' + kf.index, elementIndex: i, keyFrameIndex: kf.index, element: element, frame: kf.frame, label: label });
+            }
+            return entries;
+        };
+
+        const collectScripts = function() {
+            let scripts = [];
+            const add = function(path, script) {
+                if (script && script.Decompiled) scripts.push({ path: path, script: script });
+            };
+            const scanFrameLabels = function(prefix, timeline) {
+                for (let i = 0; i < asArray(timeline.FrameScriptLables).length; i++) {
+                    let lab = timeline.FrameScriptLables[i];
+                    for (let j = 0; j < asArray(lab.Subs).length; j++) {
+                        add(prefix + '.FrameScriptLables[' + i + '].Subs[' + j + '] frame=' + lab.TriggerFrameNumber + ' label=' + lab.LabelName, lab.Subs[j].Script);
+                    }
+                }
+            };
+            if (flpdata.Data8) scanFrameLabels('Data8', flpdata.Data8);
+            for (let i = 0; i < asArray(flpdata.Datas7).length; i++) scanFrameLabels('Datas7[' + i + ']', flpdata.Datas7[i]);
+            for (let i = 0; i < asArray(flpdata.Datas6).length; i++) {
+                let d6 = flpdata.Datas6[i];
+                if (!d6) continue;
+                if (d6.Sub1) scanFrameLabels('Datas6[' + i + '].Sub1', d6.Sub1);
+                for (let j = 0; j < asArray(d6.Sub2s).length; j++) {
+                    add('Datas6[' + i + '].Sub2s[' + j + '] mask=' + d6.Sub2s[j].EventKeysMask, d6.Sub2s[j].Script);
+                }
+            }
+            return scripts;
+        };
+
+        const validateFlp = function() {
+            let issues = [];
+            const validateTimeline = function(prefix, timeline) {
+                for (let i = 0; i < asArray(timeline.ElementsAnimation).length; i++) {
+                    let el = timeline.ElementsAnimation[i];
+                    for (let j = 0; j < asArray(el.KeyFrames).length; j++) {
+                        let k = el.KeyFrames[j];
+                        if (!k.ElementHandler) issues.push(prefix + '.ElementsAnimation[' + i + '].KeyFrames[' + j + '] sem ElementHandler');
+                        if (k.ElementHandler) {
+                            let arr = get_obj_arr_by_id(k.ElementHandler.TypeArrayId);
+                            if (k.ElementHandler.TypeArrayId !== 0 && k.ElementHandler.TypeArrayId !== 8 && (!arr || !arr[k.ElementHandler.IdInThatTypeArray])) {
+                                issues.push(prefix + '.ElementsAnimation[' + i + '].KeyFrames[' + j + '] handler inválido ' + handlerToString(k.ElementHandler));
+                            }
+                        }
+                        if (!flpdata.Transformations || !flpdata.Transformations[k.TransformationId]) issues.push(prefix + '.ElementsAnimation[' + i + '].KeyFrames[' + j + '] TransformationId inválido ' + k.TransformationId);
+                        if (!flpdata.BlendColors || !flpdata.BlendColors[k.ColorId]) issues.push(prefix + '.ElementsAnimation[' + i + '].KeyFrames[' + j + '] ColorId inválido ' + k.ColorId);
+                    }
+                }
+            };
+            if (flpdata.Data8) validateTimeline('Data8', flpdata.Data8);
+            for (let i = 0; i < asArray(flpdata.Datas7).length; i++) validateTimeline('Datas7[' + i + ']', flpdata.Datas7[i]);
+            for (let i = 0; i < asArray(flpdata.Datas6).length; i++) if (flpdata.Datas6[i] && flpdata.Datas6[i].Sub1) validateTimeline('Datas6[' + i + '].Sub1', flpdata.Datas6[i].Sub1);
+
+            let scripts = collectScripts();
+            for (let i = 0; i < scripts.length; i++) {
+                let code = asArray(scripts[i].script.Decompiled);
+                if (code.length === 0 || !String(code[code.length - 1]).trim().startsWith('00:')) {
+                    issues.push('Script sem end: ' + scripts[i].path);
+                }
+            }
+
+            for (let i = 0; i < asArray(flpdata.GlobalHandlersIndexes).length; i++) {
+                let h = flpdata.GlobalHandlersIndexes[i];
+                if (!h) continue;
+                let arr = get_obj_arr_by_id(h.TypeArrayId);
+                if (h.TypeArrayId !== 0 && h.TypeArrayId !== 8 && (!arr || h.IdInThatTypeArray < 0 || h.IdInThatTypeArray >= arr.length)) {
+                    issues.push('GlobalHandlersIndexes[' + i + '] aponta para ' + handlerToString(h) + ' fora do limite');
+                }
+            }
+            return issues;
+        };
+
+        const downloadJson = function(name, obj) {
+            let blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+            let a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = name;
+            a.click();
+            setTimeout(function() { URL.revokeObjectURL(a.href); }, 500);
+        };
+
+        const uploadEditedJson = function() {
+            if (!confirm('Enviar JSON editado para fromjson e repackar este FLP no WAD? Faça backup antes.')) return;
+            let fd = new FormData();
+            fd.append('data', new Blob([JSON.stringify(flp, null, 2)], { type: 'application/json' }), 'FLP_edited.json');
+            $.ajax({
+                url: getActionLinkForWadNode(wad, tagid, 'fromjson'),
+                method: 'POST',
+                data: fd,
+                processData: false,
+                contentType: false,
+                success: function(a) {
+                    if (a !== '' && a && a.error) alert('Erro: ' + a.error);
+                    else if (a !== '') alert('Resposta do servidor: ' + a);
+                    else alert('FLP enviado com sucesso. Recarregue o WAD para conferir.');
+                },
+                error: function(xhr) {
+                    alert('Falha no upload: ' + xhr.status + ' ' + xhr.statusText);
+                }
+            });
+        };
+
+        const appendLog = function(msg) {
+            let now = new Date().toLocaleTimeString();
+            $log.prepend($('<div>').text('[' + now + '] ' + msg));
+        };
+
+        const openSelectedInExplorer = function() {
+            if (!state.selectedEntry || !state.selectedEntry.frame) return;
+            flp_obj_view_history.unshift(state.selectedEntry.frame.ElementHandler);
+            flp_view_object_viewer();
+        };
+
+        const renderSelectedIn3d = function() {
+            let tl = getTimeline();
+            object_renderer_handler = tl.handler;
+            object_renderer_frame = state.frame;
+            flp_view_object_renderer();
+        };
+
+        const $root = $('<div id="flp-hud-editor">');
+        const $toolbar = $('<div class="flp-hud-toolbar">');
+        const $tabs = $('<div class="flp-hud-tabs">');
+        const $body = $('<div class="flp-hud-body">');
+        const $log = $('<div class="flp-hud-log">');
+
+        const $timeline = $('<select class="flp-hud-select">');
+        timelines.forEach(function(t) { $timeline.append($('<option>').val(t.id).text(t.label)); });
+        $timeline.val(state.timelineId).on('change', function() {
+            state.timelineId = this.value;
+            state.frame = 0;
+            state.selectedKey = null;
+            drawAll();
+        });
+
+        const $frame = $('<input type="range" min="0" value="0" class="flp-hud-range">');
+        const $frameText = $('<span class="flp-hud-pill">Frame 0</span>');
+        $frame.on('input', function() {
+            state.frame = safeInt(this.value, 0);
+            state.selectedKey = null;
+            drawAll();
+        });
+
+        const $zoom = $('<input type="number" step="0.1" min="0.1" max="20" class="flp-hud-small-input">').val(state.zoom).on('change', function() {
+            state.zoom = Math.max(0.1, safeNum(this.value, 1));
+            drawAll();
+        });
+        const $filter = $('<input type="search" placeholder="filtrar elemento, mesh, label..." class="flp-hud-filter">').on('input', function() {
+            state.filter = this.value;
+            drawAll();
+        });
+        const $clone = $('<input type="checkbox">').prop('checked', state.cloneTransformOnDrag).on('change', function() { state.cloneTransformOnDrag = this.checked; });
+        const $invert = $('<input type="checkbox">').prop('checked', state.invertY).on('change', function() { state.invertY = this.checked; drawAll(); });
+
+        $toolbar.append($('<label>').text('Timeline ').append($timeline));
+        $toolbar.append($('<label>').text('Frame ').append($frame));
+        $toolbar.append($frameText);
+        $toolbar.append($('<label>').text('Zoom ').append($zoom));
+        $toolbar.append($('<label class="flp-hud-check">').append($clone).append(' clonar transform ao mover'));
+        $toolbar.append($('<label class="flp-hud-check">').append($invert).append(' inverter Y'));
+        $toolbar.append($filter);
+        $toolbar.append($('<button>').text('Render timeline no 3D').click(renderSelectedIn3d));
+        $toolbar.append($('<button>').text('Validar').click(function() { state.tab = 'validate'; drawAll(); }));
+        $toolbar.append($('<button>').text('Baixar JSON completo').click(function() { downloadJson('FLP_edited_full.json', flp); }));
+        $toolbar.append($('<button>').text('Baixar FLP-only').click(function() { downloadJson('FLP_edited_only.json', flpdata); }));
+        $toolbar.append($('<button>').text('Enviar para fromjson').click(uploadEditedJson));
+
+        const makeTab = function(id, text) {
+            return $('<button class="flp-hud-tab">').attr('data-tab', id).text(text).click(function() { state.tab = id; drawAll(); });
+        };
+        $tabs.append(makeTab('stage', 'Stage/posição'));
+        $tabs.append(makeTab('labels', 'DynamicLabels'));
+        $tabs.append(makeTab('colors', 'BlendColors'));
+        $tabs.append(makeTab('scripts', 'Scripts'));
+        $tabs.append(makeTab('validate', 'Validação'));
+        $tabs.append(makeTab('raw', 'Raw JSON'));
+
+        $root.append($toolbar, $tabs, $body, $('<h3>').text('Patch log'), $log);
+        dataSummary.append($root);
+
+        const drawAll = function() {
+            let max = getFrameMax();
+            state.frame = Math.max(0, Math.min(state.frame, max));
+            $frame.attr('max', max).val(state.frame);
+            $frameText.text('Frame ' + state.frame + ' / ' + max);
+            $tabs.find('button').removeClass('active').each(function() { if ($(this).attr('data-tab') === state.tab) $(this).addClass('active'); });
+            $body.empty();
+            if (state.tab === 'stage') drawStage();
+            else if (state.tab === 'labels') drawLabels();
+            else if (state.tab === 'colors') drawColors();
+            else if (state.tab === 'scripts') drawScripts();
+            else if (state.tab === 'validate') drawValidation();
+            else drawRaw();
+        };
+
+        const drawStage = function() {
+            let entries = getVisibleEntries();
+            let $layout = $('<div class="flp-hud-stage-layout">');
+            let $left = $('<div class="flp-hud-stage-wrap">');
+            let $stage = $('<div class="flp-hud-stage">').css({ width: state.stageW + 'px', height: state.stageH + 'px' });
+            let $inspector = $('<div class="flp-hud-inspector">');
+            let $list = $('<div class="flp-hud-element-list">');
+
+            $stage.append($('<div class="flp-hud-axis-x">'), $('<div class="flp-hud-axis-y">'), $('<div class="flp-hud-origin">'));
+            $left.append($('<div class="flp-hud-stage-title">').text(getTimeline().label + ' - elementos visíveis: ' + entries.length), $stage);
+            $layout.append($left, $inspector, $list);
+            $body.append($layout);
+
+            entries.forEach(function(entry) {
+                let t = flpdata.Transformations[entry.frame.TransformationId] || { Matrix: [1, 0, 0, 1], OffsetX: 0, OffsetY: 0 };
+                let x = state.stageW / 2 + (t.OffsetX || 0) * state.zoom;
+                let y = state.stageH / 2 + (state.invertY ? -(t.OffsetY || 0) : (t.OffsetY || 0)) * state.zoom;
+                let selected = entry.key === state.selectedKey;
+                let $item = $('<div class="flp-hud-item">').toggleClass('selected', selected).text(entry.label);
+                $item.css({ left: x + 'px', top: y + 'px', borderColor: colorToCss(entry.frame.ColorId, 1), backgroundColor: colorToCss(entry.frame.ColorId, 0.25) });
+                $item.attr('title', entry.label + '\nTransform=' + entry.frame.TransformationId + ' Color=' + entry.frame.ColorId);
+                $item.on('mousedown', function(ev) {
+                    ev.preventDefault();
+                    state.selectedKey = entry.key;
+                    state.selectedEntry = entry;
+                    let transform = ensureEditableTransform(entry);
+                    let startX = ev.pageX;
+                    let startY = ev.pageY;
+                    let ox = transform.OffsetX || 0;
+                    let oy = transform.OffsetY || 0;
+                    $(document).on('mousemove.flphud', function(moveEv) {
+                        let dx = (moveEv.pageX - startX) / state.zoom;
+                        let dy = (moveEv.pageY - startY) / state.zoom;
+                        transform.OffsetX = ox + dx;
+                        transform.OffsetY = oy + (state.invertY ? -dy : dy);
+                        drawAll();
+                    });
+                    $(document).on('mouseup.flphud', function() {
+                        $(document).off('.flphud');
+                        appendLog('Movido ' + entry.label + ' para X=' + transform.OffsetX.toFixed(3) + ' Y=' + transform.OffsetY.toFixed(3));
+                    });
+                });
+                $stage.append($item);
+
+                let $row = $('<div class="flp-hud-element-row">').toggleClass('selected', selected);
+                $row.append($('<b>').text('#' + entry.elementIndex + ' '), $('<span>').text(entry.label));
+                $row.click(function() { state.selectedKey = entry.key; state.selectedEntry = entry; drawAll(); });
+                $list.append($row);
+            });
+
+            if (!state.selectedEntry && entries.length) {
+                state.selectedEntry = entries[0];
+                state.selectedKey = entries[0].key;
+                drawAll();
+                return;
+            }
+            drawInspector($inspector);
+        };
+
+        const drawInspector = function($inspector) {
+            $inspector.empty();
+            let e = state.selectedEntry;
+            if (!e || !e.frame) {
+                $inspector.append($('<h3>').text('Inspector'), $('<p>').text('Selecione um item no stage ou na lista.'));
+                return;
+            }
+            let k = e.frame;
+            let t = flpdata.Transformations[k.TransformationId] || { Matrix: [1, 0, 0, 1], OffsetX: 0, OffsetY: 0 };
+            let obj = getHandlerObject(k.ElementHandler);
+            let $title = $('<h3>').text('Inspector');
+            let $meta = $('<div class="flp-hud-meta">').append(
+                $('<div>').text('Elemento: ' + e.elementIndex + ' / KeyFrame: ' + e.keyFrameIndex),
+                $('<div>').text('Handler: ' + handlerToString(k.ElementHandler)),
+                $('<div>').text('Objeto existe: ' + (obj ? 'sim' : 'não'))
+            );
+            $inspector.append($title, $meta);
+
+            const addNumber = function(label, value, cb, step) {
+                let $i = $('<input type="number" class="flp-hud-num">').attr('step', step || '0.0625').val(value).on('change', function() { cb(safeNum(this.value, value)); drawAll(); });
+                $inspector.append($('<label class="flp-hud-field">').append($('<span>').text(label), $i));
+            };
+            const addText = function(label, value, cb) {
+                let $i = $('<input type="text" class="flp-hud-text">').val(value || '').on('change', function() { cb(this.value); drawAll(); });
+                $inspector.append($('<label class="flp-hud-field">').append($('<span>').text(label), $i));
+            };
+            addText('Nome do keyframe', k.Name || '', function(v) { k.Name = v; appendLog('Nome alterado para ' + v); });
+            addNumber('WhenThisFrameEnds', k.WhenThisFrameEnds, function(v) { k.WhenThisFrameEnds = v; }, '1');
+            addNumber('TransformationId', k.TransformationId, function(v) { k.TransformationId = Math.max(0, safeInt(v, 0)); }, '1');
+            addNumber('ColorId', k.ColorId, function(v) { k.ColorId = Math.max(0, safeInt(v, 0)); }, '1');
+            addNumber('OffsetX', t.OffsetX || 0, function(v) { t.OffsetX = v; });
+            addNumber('OffsetY', t.OffsetY || 0, function(v) { t.OffsetY = v; });
+            for (let i = 0; i < 4; i++) {
+                addNumber('Matrix[' + i + ']', asArray(t.Matrix)[i] || (i === 0 || i === 3 ? 1 : 0), function(v) { if (!t.Matrix) t.Matrix = [1, 0, 0, 1]; t.Matrix[i] = v; }, '0.0001');
+            }
+            $inspector.append($('<div class="flp-hud-actions">')
+                .append($('<button>').text('Clonar transform').click(forceCloneSelectedTransform))
+                .append($('<button>').text('Abrir no Obj explorer').click(openSelectedInExplorer))
+                .append($('<button>').text('Render timeline no 3D').click(renderSelectedIn3d))
+            );
+            $inspector.append($('<details>').append($('<summary>').text('Objeto raw'), $('<pre>').text(JSON.stringify(obj, null, 2))));
+        };
+
+        const drawLabels = function() {
+            let labels = asArray(flpdata.DynamicLabels);
+            let $wrap = $('<div class="flp-hud-table-wrap">');
+            let $table = $('<table class="flp-hud-table">');
+            $table.append($('<tr>').append($('<th>').text('Id'), $('<th>').text('Resumo'), $('<th>').text('JSON editável')));
+            for (let i = 0; i < labels.length; i++) {
+                let label = labels[i];
+                let summary = [];
+                Object.keys(label || {}).slice(0, 8).forEach(function(k) { if (typeof label[k] !== 'object') summary.push(k + '=' + label[k]); });
+                let $ta = $('<textarea class="flp-hud-json-cell">').val(JSON.stringify(label, null, 2));
+                let $apply = $('<button>').text('Aplicar').click(function() {
+                    try { flpdata.DynamicLabels[i] = JSON.parse($ta.val()); appendLog('DynamicLabels[' + i + '] atualizado.'); drawLabels(); }
+                    catch (e) { alert('JSON inválido em DynamicLabels[' + i + ']: ' + e.message); }
+                });
+                $table.append($('<tr>').append($('<td>').text(i), $('<td>').text(summary.join(' | ')), $('<td>').append($ta, $('<br>'), $apply)));
+            }
+            $wrap.append($table);
+            $body.append($wrap);
+        };
+
+        const drawColors = function() {
+            let colors = asArray(flpdata.BlendColors);
+            let $table = $('<table class="flp-hud-table">');
+            $table.append($('<tr>').append($('<th>').text('Id'), $('<th>').text('Preview'), $('<th>').text('R'), $('<th>').text('G'), $('<th>').text('B'), $('<th>').text('A')));
+            for (let i = 0; i < colors.length; i++) {
+                let c = colors[i].Color || [256, 256, 256, 256];
+                let $row = $('<tr>');
+                $row.append($('<td>').text(i), $('<td>').append($('<div class="flp-hud-color-preview">').css('background-color', colorToCss(i))));
+                for (let ch = 0; ch < 4; ch++) {
+                    let $input = $('<input type="number" min="0" max="256" step="1" class="flp-hud-color-input">').val(c[ch]).on('change', function() {
+                        c[ch] = Math.max(0, Math.min(256, safeInt(this.value, c[ch])));
+                        appendLog('BlendColors[' + i + '] = [' + c.join(', ') + ']');
+                        drawColors();
+                    });
+                    $row.append($('<td>').append($input));
+                }
+                $table.append($row);
+            }
+            $body.append($('<div class="flp-hud-table-wrap">').append($table));
+        };
+
+        const drawScripts = function() {
+            let scripts = collectScripts();
+            let $select = $('<select class="flp-hud-select flp-hud-script-select">');
+            for (let i = 0; i < scripts.length; i++) $select.append($('<option>').val(i).text(i + ': ' + scripts[i].path));
+            let $ta = $('<textarea class="flp-hud-script-text">');
+            let load = function() {
+                let item = scripts[safeInt($select.val(), 0)];
+                $ta.val(asArray(item.script.Decompiled).join('\n'));
+            };
+            $select.on('change', load);
+            let $buttons = $('<div class="flp-hud-actions">');
+            [
+                '00:                  // end',
+                '07:                  // Stop (current target)',
+                '06:                  // Play (current target)',
+                '8B: ""               // SetTarget \'\'',
+                '8C: "Label"          // GotoLabel \'Label\'',
+                '9E:                  // CallFrame @pop_string',
+                '96: "text"           // push_string \'text\''
+            ].forEach(function(line) {
+                $buttons.append($('<button>').text(line.split('//')[1] || line).click(function() { $ta.val($ta.val() + ($ta.val() ? '\n' : '') + line); }));
+            });
+            let $apply = $('<button>').text('Aplicar script').click(function() {
+                let item = scripts[safeInt($select.val(), 0)];
+                item.script.Decompiled = $ta.val().split(/\r?\n/);
+                appendLog('Script atualizado: ' + item.path);
+            });
+            let $find = $('<input class="flp-hud-filter" placeholder="procurar nos scripts">');
+            let $replace = $('<input class="flp-hud-filter" placeholder="substituir por">');
+            let $replaceBtn = $('<button>').text('Find/Replace global').click(function() {
+                let f = $find.val();
+                if (!f) return;
+                let r = $replace.val();
+                let total = 0;
+                scripts.forEach(function(item) {
+                    item.script.Decompiled = asArray(item.script.Decompiled).map(function(line) {
+                        if (String(line).indexOf(f) >= 0) { total++; return String(line).split(f).join(r); }
+                        return line;
+                    });
+                });
+                appendLog('Find/Replace aplicado em ' + total + ' linhas.');
+                load();
+            });
+            $body.append($('<div class="flp-hud-script-editor">').append($('<h3>').text('Scripts Decompiled'), $select, $buttons, $ta, $('<div class="flp-hud-actions">').append($apply, $find, $replace, $replaceBtn)));
+            load();
+        };
+
+        const drawValidation = function() {
+            let issues = validateFlp();
+            let $box = $('<div class="flp-hud-validation">');
+            if (issues.length === 0) {
+                $box.append($('<div class="flp-hud-ok">').text('Nenhum problema crítico detectado.'));
+            } else {
+                $box.append($('<div class="flp-hud-bad">').text(issues.length + ' problema(s) encontrado(s):'));
+                let $ul = $('<ul>');
+                issues.forEach(function(i) { $ul.append($('<li>').text(i)); });
+                $box.append($ul);
+            }
+            $body.append($box);
+        };
+
+        const drawRaw = function() {
+            let $ta = $('<textarea class="flp-hud-raw-json">').val(JSON.stringify(flpdata, null, 2));
+            let $apply = $('<button>').text('Aplicar Raw JSON no FLP').click(function() {
+                try {
+                    let edited = JSON.parse($ta.val());
+                    Object.keys(flpdata).forEach(function(k) { delete flpdata[k]; });
+                    Object.keys(edited).forEach(function(k) { flpdata[k] = edited[k]; });
+                    appendLog('Raw JSON aplicado.');
+                    drawAll();
+                } catch (e) {
+                    alert('JSON inválido: ' + e.message);
+                }
+            });
+            $body.append($('<div class="flp-hud-raw">').append($('<p>').text('Edição avançada. Use validação antes de exportar.'), $ta, $('<br>'), $apply));
+        };
+
+        drawAll();
+    }
+
     dataSummarySelectors.append($('<div class="item-selector">').click(flp_list_labels).text("Labels editor"));
     dataSummarySelectors.append($('<div class="item-selector">').click(flp_print_dump).text("Dump"));
     dataSummarySelectors.append($('<div class="item-selector">').click(flp_view_font).text("Font viewer"));
     dataSummarySelectors.append($('<div class="item-selector">').click(flp_view_object_viewer).text("Obj explorer"));
     dataSummarySelectors.append($('<div class="item-selector">').click(flp_view_object_renderer).text("Obj renderer"));
+    dataSummarySelectors.append($('<div class="item-selector">').click(flp_hud_stage_editor).text("HUD editor"));
 
     // flp_list_labels();
     flp_view_object_viewer();
     flp_view_object_renderer();
+}
+
+/* ========================================================================== */
+/* Pro FLP utility layer                                                        */
+/* ========================================================================== */
+if (typeof gowFlp !== 'undefined') {
+    gowFlp.prototype.resolveHandlerName = function(handler) {
+        if (!handler) return '<null handler>';
+        var names = {0:'Null',1:'MeshPart',3:'Font',4:'StaticLabel',5:'DynamicLabel',6:'Data6',7:'Timeline',8:'Root',9:'Transform',10:'Color'};
+        var base = names[handler.TypeArrayId] || ('Type' + handler.TypeArrayId);
+        return base + '[' + handler.IdInThatTypeArray + ']';
+    };
+
+    gowFlp.prototype.validateLight = function() {
+        var errors = [];
+        var data = this.data;
+        function chkArr(arr, id, name) {
+            if (id < 0 || !arr || id >= arr.length) errors.push(name + ' id fora do limite: ' + id);
+        }
+        function checkKeyFrame(kf, ctx) {
+            if (!kf) return;
+            if (kf.ElementHandler) {
+                var arr = (kf.ElementHandler.TypeArrayId === 8) ? [data.Data8] : this.getObjArrByType(kf.ElementHandler.TypeArrayId);
+                chkArr.call(this, arr, kf.ElementHandler.IdInThatTypeArray, ctx + ' handler ' + kf.ElementHandler.TypeArrayId);
+            }
+            chkArr(data.Transformations, kf.TransformationId, ctx + ' transform');
+            chkArr(data.BlendColors, kf.ColorId, ctx + ' color');
+        }
+        if (data.Data8 && data.Data8.ElementsAnimation) {
+            for (var e = 0; e < data.Data8.ElementsAnimation.length; e++) {
+                var el = data.Data8.ElementsAnimation[e];
+                for (var k = 0; k < el.KeyFrames.length; k++) checkKeyFrame.call(this, el.KeyFrames[k], 'Data8['+e+'].KeyFrames['+k+']');
+            }
+        }
+        if (data.Datas7) {
+            for (var d = 0; d < data.Datas7.length; d++) {
+                var tl = data.Datas7[d];
+                if (!tl || !tl.ElementsAnimation) continue;
+                for (var e2 = 0; e2 < tl.ElementsAnimation.length; e2++) {
+                    for (var k2 = 0; k2 < tl.ElementsAnimation[e2].KeyFrames.length; k2++) checkKeyFrame.call(this, tl.ElementsAnimation[e2].KeyFrames[k2], 'Datas7['+d+']['+e2+']['+k2+']');
+                }
+            }
+        }
+        return errors;
+    };
 }

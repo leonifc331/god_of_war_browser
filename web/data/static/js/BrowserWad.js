@@ -1,5 +1,11 @@
 'use strict';
 
+let gw_cxt_group_loading = false;
+let flp_obj_view_history = [{
+    TypeArrayId: 8,
+    IdInThatTypeArray: 0
+}];
+
 function treeLoadWad_dumpButtons(li, wadName, tag) {
     li.append($('<div>')
         .addClass('button-upload')
@@ -61,32 +67,20 @@ function treeLoadWadAsNodes(wadName, data) {
     $('#view-tree ol li label').click(function(ev) {
         let node_element = $(this).parent();
         let node_id = parseInt(node_element.attr('nodeid'));
-        console.log(node_id);
         if (node_id !== 0) {
-            gw_cxt_group_loading = true;
+            gw_cxt_group_loading = false;
             treeLoadWadNode(wadName, node_id);
         } else {
+            setLocation(wadName + " => " + node_element.attr('nodename'), '#/' + wadName + '/' + 0);
             dataSummary.empty();
             gr_instance.cleanup();
-
-            gw_cxt_group_loading = true;
-
-            setLocation(wadName + " => " + node_element.attr('nodename'), '#/' + wadName + '/' + 0);
-
             $("#view-tree ol li").each(function(i, node) {
+                gw_cxt_group_loading = true;
                 let $node = $(node);
-                if ($node.attr("nodetag") == "30" || $node.attr("nodetag") == "1") {
-                    const nn = $node.attr("nodename");
-                    if (nn.startsWith("PS")) {
-                        treeLoadWadNode(wadName, $node.attr("nodeid"), 0x6);
-                    } else if (nn.startsWith("CXT_")) {
-                        treeLoadWadNode(wadName, $node.attr("nodeid"), 0x80000001);
-                    } else if (nn.startsWith("RIB_sheet")) {
-                        treeLoadWadNode(wadName, $node.attr("nodeid"), 0x00000011);
-                        //} else if (nn.startsWith("CMZ_") || nn.startsWith("ENZ_") || nn.startsWith("SEZ_")) {
-                        //	treeLoadWadNode(wadName, $node.attr("nodeid"), 0x00000011);
-                        // // ^^^^^ this should be loaded in CMV_, ENV_, SEV_ 
-                    }
+                if ($node.attr("nodetag") == "30" && $node.attr("nodename").startsWith("PS")) {
+                    treeLoadWadNode(wadName, $node.attr("nodeid"), 0x6);
+                } else if ($node.attr("nodetag") == "30" && $node.attr("nodename").startsWith("CXT_")) {
+                    treeLoadWadNode(wadName, $node.attr("nodeid"), 0x80000001);
                 }
             });
         }
@@ -135,10 +129,8 @@ function treeLoadWadAsTags(wadName, data) {
 }
 
 function treeLoadWadNode(wad, tagid, filterServerId = undefined) {
-    if (!gw_cxt_group_loading) {
-        dataSummary.empty();
-        dataSummarySelectors.empty();
-    }
+    dataSummary.empty();
+    dataSummarySelectors.empty();
     set3dVisible(false);
 
     $.getJSON('/json/pack/' + wad + '/' + tagid, function(resp) {
@@ -167,12 +159,10 @@ function treeLoadWadNode(wad, tagid, filterServerId = undefined) {
                 }
                 switch (resp.ServerId) {
                     case 0x00000021: // flp
-                    case 0x0000001B: // flp gow2
                         summaryLoadWadFlp(data, wad, tagid);
                         break;
                     case 0x00000018: // sbk blk
                     case 0x00040018: // sbk vag
-                    case 0x00000015: // sbk blk
                         summaryLoadWadSbk(data, wad, tagid);
                         needMarshalDump = true;
                         break;
@@ -181,14 +171,11 @@ function treeLoadWadNode(wad, tagid, filterServerId = undefined) {
                             let pos = data.Position;
                             let color = data.Color;
 
-                            let lightName = new RenderTextMesh("\x0f" + tag.Name, true);
+                            let lightName = new grTextMesh("\x0f" + tag.Name, pos[0], pos[1], pos[2], true);
                             lightName.setColor(color[0], color[1], color[2]);
-                            lightName.setOffset(0, -0.5);
+                            lightName.setOffset(-0.5, -0.5);
                             lightName.setMaskBit(5);
-
-                            let node = new ObjectTreeNodeModel("lightName", lightName);
-                            node.setLocalMatrix(mat4.fromTranslation(mat4.create(), pos));
-                            gr_instance.addNode(node);
+                            gr_instance.texts.push(lightName);
                         } else {
                             needMarshalDump = true;
                             needHexDump = true;
@@ -196,20 +183,22 @@ function treeLoadWadNode(wad, tagid, filterServerId = undefined) {
                         break;
                     case 0x00000007: // txr
                         summaryLoadWadTxr(data, wad, tagid);
-                        break;
-                    case 0x00070007: // ps3 txr
-                        summaryLoadWadTxrPs3(data, wad, tagid);
+						needMarshalDump = true;
+                        needHexDump = true;
                         break;
                     case 0x00000008: // material
                         summaryLoadWadMat(data);
                         break;
                     case 0x00000011: // collision
-                        if (gw_cxt_group_loading !== true) {
-                            gr_instance.cleanup();
-                            set3dVisible(true);
-                        }
-                        let node = loadCollisionFromAjax(data, wad, tagid);
-                        gr_instance.addNode(node);
+                        gr_instance.cleanup();
+                        set3dVisible(true);
+						needMarshalDump = true;
+                        needHexDump = true;
+
+                        let mdl = new grModel();
+                        loadCollisionFromAjax(mdl, data);
+
+                        gr_instance.models.push(mdl);
                         gr_instance.requestRedraw();
                         break;
                     case 0x00000003: // anim
@@ -218,15 +207,18 @@ function treeLoadWadNode(wad, tagid, filterServerId = undefined) {
                         break;
                     case 0x0001000f: // mesh
                         summaryLoadWadMesh(data, wad, tagid);
+						needMarshalDump = true;
+                        needHexDump = true;
                         break;
                     case 0x0003000f: // gmdl
                         summaryLoadWadGmdl(data, wad, tagid);
                         break;
                     case 0x0002000f: // mdl
                         summaryLoadWadMdl(data, wad, tagid);
+						needMarshalDump = true;
+                        needHexDump = true;
                         break;
                     case 0x00040001: // obj
-                    case 0x00010001: // obj gow2
                         summaryLoadWadObj(data, wad, tagid);
                         break;
                     case 0x80000001: // cxt
@@ -235,12 +227,9 @@ function treeLoadWadNode(wad, tagid, filterServerId = undefined) {
                     case 0x00020001: // gameObject
                         summaryLoadWadGameObject(data);
                         break;
-                    case 0x00030001: // gameObject gow2
-                        summaryLoadWadGameObject(data);
-                        break;
                     case 0x00010004: // script
-                        summaryLoadWadScript(data, wad, tagid);
-                        //needMarshalDump = true;
+                        summaryLoadWadScript(data);
+                        needMarshalDump = true;
                         needHexDump = true;
                         break;
                     case 0x0000000c: // gfx pal
@@ -252,18 +241,10 @@ function treeLoadWadNode(wad, tagid, filterServerId = undefined) {
                 }
             } else if (tag.Tag == 112) {
                 summaryLoadWadGeomShape(data);
-            } else if (tag.Tag == 113 || tag.Tag == 114) {
-                summaryLoadWadTWK(data, wad, tagid);
-                needMarshalDump = false;
-                needHexDump = false;
-            } else if (tag.Tag == 500) {
-                summaryLoadWadRSRCS(data, wad, tagid);
-                needMarshalDump = false;
-                needHexDump = false;
             } else {
                 needHexDump = true;
             }
-            // console.log('wad ' + wad + ' file (' + tag.Name + ')' + tag.Id + ' loaded. serverid:' + resp.ServerId);
+            console.log('wad ' + wad + ' file (' + tag.Name + ')' + tag.Id + ' loaded. serverid:' + resp.ServerId);
         }
 
         if (needMarshalDump) {
@@ -311,78 +292,79 @@ function displayResourceHexDump(wad, tagid) {
     });
 }
 
-function parseMeshPackets(object, packets, instanceIndex) {
-    let m_indexes = [];
+function parseMeshPacket(object, packet, instanceIndex) {
     let m_vertexes = [];
-    let m_weights = [];
-    let m_colors = [];
-    let m_textures = [];
-    let m_normals = [];
-    let m_joints1 = [];
-    let m_joints2 = [];
+    let m_indexes = [];
+    let m_colors;
+    let m_textures;
+    let m_normals;
 
-    let offset = 0;
-    for (const packet of packets) {
-        const vertexCount = packet.Trias.X.length;
+    m_vertexes.length = packet.Trias.X.length * 3;
 
-        for (const i in packet.Trias.X) {
-            m_vertexes.push(packet.Trias.X[i], packet.Trias.Y[i], packet.Trias.Z[i]);
-            if (!packet.Trias.Skip[i]) {
-                m_indexes.push(offset + parseInt(i) - 2, offset + parseInt(i) - 1, offset + parseInt(i) - 0);
-            }
+    for (let i in packet.Trias.X) {
+        let j = i * 3;
+        m_vertexes[j] = packet.Trias.X[i];
+        m_vertexes[j + 1] = packet.Trias.Y[i];
+        m_vertexes[j + 2] = packet.Trias.Z[i];
+        if (!packet.Trias.Skip[i]) {
+            m_indexes.push(i - 2);
+            m_indexes.push(i - 1);
+            m_indexes.push(i - 0);
         }
-
-        if (packet.Trias.Weight && packet.Trias.Weight.length) {
-            for (const i in packet.Trias.Weight) {
-                m_weights.push(packet.Trias.Weight[i]);
-            }
-        }
-
-        if (packet.Joints && packet.Joints.length) {
-            const joints1 = packet.Joints;
-            const joints2 = (!!packet.Joints2) ? packet.Joints2 : joints1;
-            for (const i in joints1) {
-                m_joints1.push(joints1[i]);
-                m_joints2.push(joints2[i]);
-            }
-        }
-
-        if (packet.Blend.R && packet.Blend.R.length) {
-            for (const i in packet.Blend.R) {
-                m_colors.push(packet.Blend.R[i], packet.Blend.G[i], packet.Blend.B[i], packet.Blend.A[i]);
-            }
-        }
-
-        if (packet.Uvs.U && packet.Uvs.U.length) {
-            for (const i in packet.Uvs.U) {
-                m_textures.push(packet.Uvs.U[i], packet.Uvs.V[i]);
-            }
-        }
-
-        if (packet.Norms.X && packet.Norms.X.length) {
-            for (const i in packet.Norms.X) {
-                m_normals.push(packet.Norms.X[i], packet.Norms.Y[i], packet.Norms.Z[i]);
-            }
-        }
-
-        offset += vertexCount;
     }
 
-    let mesh = new RenderMesh(m_vertexes, m_indexes);
-    if (m_colors.length) {
+    let mesh = new grMesh(m_vertexes, m_indexes);
+    mesh.setUseBindToJoin(object.UseInvertedMatrix);
+
+    if (packet.Blend.R && packet.Blend.R.length) {
+        let m_colors = [];
+        m_colors.length = packet.Blend.R.length * 4;
+        for (let i in packet.Blend.R) {
+            let j = i * 4;
+            m_colors[j] = packet.Blend.R[i];
+            m_colors[j + 1] = packet.Blend.G[i];
+            m_colors[j + 2] = packet.Blend.B[i];
+            m_colors[j + 3] = packet.Blend.A[i];
+        }
+
         mesh.setBlendColors(m_colors);
     }
-    if (m_textures.length) {
+
+    mesh.setMaterialID(object.MaterialId);
+
+    if (packet.Uvs.U && packet.Uvs.U.length) {
+        m_textures = [];
+        m_textures.length = packet.Uvs.U.length * 2;
+
+        for (let i in packet.Uvs.U) {
+            let j = i * 2;
+            m_textures[j] = packet.Uvs.U[i];
+            m_textures[j + 1] = packet.Uvs.V[i];
+        }
         mesh.setUVs(m_textures);
     }
-    if (m_normals.length) {
+
+    if (packet.Norms.X && packet.Norms.X.length) {
+        m_normals = [];
+        m_normals.length = packet.Norms.X.length * 3;
+
+        for (let i in packet.Norms.X) {
+            let j = i * 3;
+            m_normals[j] = packet.Norms.X[i];
+            m_normals[j + 1] = packet.Norms.Y[i];
+            m_normals[j + 2] = packet.Norms.Z[i];
+        }
+
         mesh.setNormals(m_normals);
     }
 
-    if (object.JointMappers && object.JointMappers.length) {
-        const jm = object.JointMappers[instanceIndex];
-        if (jm && jm.length && m_joints1.length && m_weights.length) {
-            mesh.setJointIds(jm, m_joints1, m_joints2, m_weights);
+    if (packet.Joints && packet.Joints.length && object.JointMappers && object.JointMappers.length) {
+        let jm = object.JointMappers[instanceIndex];
+        if (jm && jm.length) {
+            //console.log(packet.Joints, packet.Joints2, object.JointMappers);
+            let joints1 = packet.Joints;
+            let joints2 = (!!packet.Joints2) ? packet.Joints2 : undefined;
+            mesh.setJointIds(jm, joints1, joints2);
         }
     }
 
@@ -392,46 +374,52 @@ function parseMeshPackets(object, packets, instanceIndex) {
 function loadMeshPartFromAjax(model, data, iPart, table = undefined) {
     let part = data.Parts[iPart];
     let totalMeshes = [];
-
     for (let iGroup in part.Groups) {
         let group = part.Groups[iGroup];
         for (let iObject in group.Objects) {
             let object = group.Objects[iObject];
 
+            //let iSkin = 0;
             for (let iInstance = 0; iInstance < object.InstancesCount; iInstance++) {
                 for (let iLayer = 0; iLayer < object.TextureLayersCount; iLayer++) {
+                    // there is no situation when TextureLayersCount > 1 && InstancesCount > 1
+                    // so we can multiply on any of them
+
                     let iDmaPacket = iInstance * object.TextureLayersCount + iLayer;
                     let dmaPackets = object.Packets[iDmaPacket];
-
-                    let objName = "p" + iPart + "_g" + iGroup + "_o" + iObject + "m" + object.MaterialId;
-                    if (object.InstancesCount != 1) {
+                    let objName = "p" + iPart + "_g" + iGroup + "_o" + iObject;
+                    if (object.InstancesCount > 1) {
                         objName += "_i" + iInstance
-                    } else if (object.TextureLayersCount != 1) {
+                    } else if (object.TextureLayersCount > 1) {
                         objName += "_l" + iLayer;
                     }
+                    objName += ":" + object.MaterialId;
 
-                    const mesh = parseMeshPackets(object, dmaPackets, iInstance);
-                    mesh.meta['part'] = iPart;
-                    mesh.meta['group'] = iGroup;
-                    mesh.meta['object'] = iObject;
-                    mesh.setUseBindToJoin(object.UseInvertedMatrix);
-                    mesh.setMaterialID(object.MaterialId);
-                    if (object.TextureLayersCount != 1) {
-                        mesh.setLayer(iLayer);
+                    let meshes = [];
+                    for (let iPacket in dmaPackets) {
+                        let dmaPacket = dmaPackets[iPacket];
+                        let mesh = parseMeshPacket(object, dmaPacket, iInstance);
+                        if (object.TextureLayersCount != 1) {
+                            mesh.setLayer(iLayer);
+                        }
+
+                        meshes.push(mesh);
+                        totalMeshes.push(mesh);
+                        model.addMesh(mesh);
                     }
-                    totalMeshes.push(mesh);
-                    model.addMesh(mesh);
 
                     if (table) {
                         let label = $('<label>');
                         let chbox = $('<input type="checkbox" checked>');
                         let td = $('<td>').append(label);
-                        chbox.click(mesh, function(ev) {
-                            ev.data.setVisible(this.checked);
+                        chbox.click(meshes, function(ev) {
+                            for (let i in ev.data) {
+                                ev.data[i].setVisible(this.checked);
+                            }
                             gr_instance.requestRedraw();
                         });
-                        td.mouseenter([model, mesh], function(ev) {
-                            ev.data[0].showExclusiveMeshes([ev.data[1]]);
+                        td.mouseenter([model, meshes], function(ev) {
+                            ev.data[0].showExclusiveMeshes(ev.data[1]);
                             gr_instance.requestRedraw();
                         }).mouseleave(model, function(ev, a) {
                             ev.data.showExclusiveMeshes();
@@ -461,21 +449,15 @@ function summaryLoadWadMesh(data, wad, nodeid) {
     gr_instance.cleanup();
     set3dVisible(true);
 
-    let mdl = new RenderModel();
+    let mdl = new grModel();
 
-    let dumplinkobj = getActionLinkForWadNode(wad, nodeid, 'obj');
-    dataSummary.append($('<a class="center">').attr('href', dumplinkobj).append('Download .obj'));
-
-    let dumplinkgltf = getActionLinkForWadNode(wad, nodeid, 'gltf');
-    dataSummary.append($('<a class="center">').attr('href', dumplinkgltf).append('Download .glb bin glTF 2.0'));
+    let dumplink = getActionLinkForWadNode(wad, nodeid, 'obj');
+    dataSummary.append($('<a class="center">').attr('href', dumplink).append('Download .obj (xyz+norm+uv)'));
 
     let table = loadMeshFromAjax(mdl, data, true);
     dataSummary.append(table);
 
-    console.log(data.Vectors);
-    console.log(data);
-
-    gr_instance.addNode(new ObjectTreeNodeModel("mesh", mdl));
+    gr_instance.models.push(mdl);
     gr_instance.requestRedraw();
 }
 
@@ -494,8 +476,6 @@ function parseGmdlObjectMesh(part, object, originalMeshObject) {
 
     let m_vertexes = [];
     m_vertexes.length = sPos.length * 3;
-    let m_weights = [];
-    m_weights.length = sPos.length;
 
     for (let i in sPos) {
         let j = i * 3;
@@ -503,17 +483,13 @@ function parseGmdlObjectMesh(part, object, originalMeshObject) {
         m_vertexes[j + 0] = pos[0];
         m_vertexes[j + 1] = pos[1];
         m_vertexes[j + 2] = pos[2];
-        m_weights[i] = pos[3];
     }
 
     for (let i in m_indexes) {
         m_indexes[i] -= streamStart;
     }
 
-    let mesh = new RenderMesh(m_vertexes, m_indexes);
-    if (originalMeshObject) {
-        mesh.setUseBindToJoin(originalMeshObject.UseInvertedMatrix);
-    }
+    let mesh = new grMesh(m_vertexes, m_indexes);
 
     mesh.setMaterialID(object.TextureIndex);
 
@@ -552,19 +528,17 @@ function parseGmdlObjectMesh(part, object, originalMeshObject) {
         let joints2 = [];
         let sBoni = streams["BONI"].Values.slice(streamStart, streamStart + streamCount);
         joints1.length = sBoni.length;
-        joints2.length = sBoni.length;
         for (let i in sBoni) {
             joints1[i] = sBoni[i][0];
-            joints2[i] = sBoni[i][1];
+            joints2[i] = sBoni[i][3];
         }
-        mesh.setJointIds(object.JointsMap, joints1, joints2, m_weights);
+
+        mesh.setJointIds(object.JointsMap, joints1);
     }
 
     //console.log(originalMeshObject.Type, originalMeshObject);	
-    if (originalMeshObject) {
-        if (originalMeshObject.Type == 0x1d) {
-            mesh.setps3static(true);
-        }
+    if (originalMeshObject.Type == 0x1d) {
+        mesh.setps3static(true);
     }
 
     return mesh;
@@ -573,7 +547,6 @@ function parseGmdlObjectMesh(part, object, originalMeshObject) {
 function loadGmdlPartFromAjax(model, data, iPart, originalPart, table = undefined) {
     let part = data.Models[iPart];
     let totalMeshes = [];
-
     for (let iObject in part.Objects) {
         let object = part.Objects[iObject];
 
@@ -581,10 +554,13 @@ function loadGmdlPartFromAjax(model, data, iPart, originalPart, table = undefine
 
         let originalMeshObject;
         if (originalPart) {
-            // ignore lods
+            if (originalPart.Groups.length > 1) {
+                log.error("Original part group: ", originalPart.Groups, originalPart);
+            }
             originalMeshObject = originalPart.Groups[0].Objects[iObject];
         }
         let mesh = parseGmdlObjectMesh(part, object, originalMeshObject);
+
 
         totalMeshes.push(mesh);
         model.addMesh(mesh);
@@ -623,7 +599,6 @@ function loadGmdlFromAjax(model, data, originalMesh, needTable = false) {
         }
         loadGmdlPartFromAjax(model, data, iPart, originalPart, table);
     }
-
     gr_instance.flushScene();
     return table;
 }
@@ -632,36 +607,28 @@ function summaryLoadWadGmdl(data, wad, nodeid) {
     gr_instance.cleanup();
     set3dVisible(true);
 
-    let model = new RenderModel();
+    let mdl = new grModel();
 
-    let table = loadGmdlFromAjax(model, data, undefined, true);
+    let table = loadGmdlFromAjax(mdl, data, undefined, true);
     dataSummary.append(table);
 
-    let node = new ObjectTreeNodeModel("gmdl", model);
-    gr_instance.addNode(node);
-
+    gr_instance.models.push(mdl);
     gr_instance.requestRedraw();
 }
 
-function loadMdlFromAjax(data, parseScripts = false, needTable = false) {
-    let model = new RenderModel();
-
-    let tables = [];
+function loadMdlFromAjax(mdl, data, parseScripts = false, needTable = false) {
+    let table = undefined;
     if (data.Meshes && data.Meshes.length) {
-        for (let mesh of data.Meshes) {
-            let mdlTables;
-            if (false) { // (!!data.GMDL) {
-                // GMDL static meshes already translated to position?
-                mdlTables = loadGmdlFromAjax(model, data.GMDL, mesh, needTable);
-            } else {
-                mdlTables = loadMeshFromAjax(model, mesh, needTable);
-            }
-            tables.push(mdlTables);
+        let mesh = data.Meshes[0];
+        if (!!data.GMDL) {
+            table = loadGmdlFromAjax(mdl, data.GMDL, mesh, needTable);
+        } else {
+            table = loadMeshFromAjax(mdl, data.Meshes[0], needTable);
         }
     }
 
     for (let iMaterial in data.Materials) {
-        let material = new RenderMaterial();
+        let material = new grMaterial();
 
         let textures = data.Materials[iMaterial].Textures;
         let rawMat = data.Materials[iMaterial].Mat;
@@ -669,7 +636,7 @@ function loadMdlFromAjax(data, parseScripts = false, needTable = false) {
 
         for (let iLayer in rawMat.Layers) {
             let rawLayer = rawMat.Layers[iLayer];
-            let layer = new RenderMaterialLayer();
+            let layer = new grMaterialLayer();
 
             layer.setColor(rawLayer.BlendColor);
             if (rawLayer.ParsedFlags.RenderingSubstract === true) {
@@ -690,15 +657,14 @@ function loadMdlFromAjax(data, parseScripts = false, needTable = false) {
                 let imgs = textures[iLayer].Images;
                 let txrs = [];
                 for (let iImg in imgs) {
-                    txrs.push(new RenderTexture('data:image/png;base64,' + imgs[iImg].Image));
+                    txrs.push(new grTexture('data:image/png;base64,' + imgs[iImg].Image));
                 }
                 layer.setTextures(txrs);
                 layer.setHasAlphaAttribute(textures[iLayer].HaveTransparent);
             }
             material.addLayer(layer);
         }
-
-        model.addMaterial(material);
+        mdl.addMaterial(material);
 
         let anim = data.Materials[iMaterial].Animations;
         if (anim && anim.Groups && anim.Groups.length) {
@@ -709,12 +675,12 @@ function loadMdlFromAjax(data, parseScripts = false, needTable = false) {
                     for (let dt in anim.DataTypes) {
                         switch (anim.DataTypes[dt].TypeId) {
                             case 8:
-                                let animInstance = new AnimationMatertialLayer(anim, act, dt, material);
+                                let animInstance = new gaMatertialLayerAnimation(anim, act, dt, material);
                                 animInstance.enable();
                                 ga_instance.addAnimation(animInstance);
                                 break;
                             case 9:
-                                let animSheetInstance = new AnimationMaterialSheet(anim, act, dt, material);
+                                let animSheetInstance = new gaMatertialSheetAnimation(anim, act, dt, material);
                                 ga_instance.addAnimation(animSheetInstance);
                                 break;
                         }
@@ -724,24 +690,27 @@ function loadMdlFromAjax(data, parseScripts = false, needTable = false) {
         }
     }
 
-    if (parseScripts && data.Scripts) {
-        for (const script of data.Scripts) {
-            switch (script.TargetName) {
+    if (parseScripts) {
+        for (let i in data.Scripts) {
+            let scr = data.Scripts[i];
+            switch (scr.TargetName) {
                 case "SCR_Sky":
-                    model.setType("sky");
+                    mdl.setType("sky");
                     break;
                 default:
-                    console.warn("Unknown SCR target: " + script.TargetName, data, model, script);
+                    console.warn("Unknown SCR target: " + scr.TargetName, data, mdl, scr);
                     break;
             }
         }
     }
-    return [model, tables];
+    return table;
 }
 
 function summaryLoadWadMdl(data, wad, nodeid) {
     gr_instance.cleanup();
     set3dVisible(true);
+
+    let mdl = new grModel();
 
     let table = $('<table>');
     if (data.Raw) {
@@ -760,54 +729,13 @@ function summaryLoadWadMdl(data, wad, nodeid) {
     }
     dataSummary.append(table);
 
-    let dumplinkgltf = getActionLinkForWadNode(wad, nodeid, 'gltf');
-    dataSummary.append($('<a class="center">').attr('href', dumplinkgltf).append('Download .glb bin glTF 2.0'));
+    let dumplink = getActionLinkForWadNode(wad, nodeid, 'zip');
+    dataSummary.append($('<a class="center">').attr('href', dumplink).append('Download .zip(obj+mtl+png)'));
 
-    // console.log(data);
-    // for (const mesh of data.Meshes) {
-    //     for (const i in mesh.Vectors) {
-    //         const vec = mesh.Vectors[i];
-    //         console.log(i, vec, vec.Value);
-    //         //if (vec.Unk00 > 100) {
-    //         if (!(i === 0 || i === mesh.Vectors.length - 1)) {
-    //         //if (vec.Unk00 === 65494) {
-    //             continue;   
-    //         }
-    //         let pos = vec.Value;
-    //         let size = pos[0];
-    //         pos = [
-    //             pos[1], pos[2], pos[3],
-    //             //pos[1], pos[0], pos[3],
-    //         ]
-    //         let mat = mat4.fromTranslation(mat4.create(), pos);
+    let mdlTable = loadMdlFromAjax(mdl, data, false, true);
+    dataSummary.append(mdlTable);
 
-    //         let model = new RenderModel();
-    //         model.addMesh(RenderHelper.SphereLinesMesh(pos[0], pos[1], pos[2], size, 15, 15));
-    //         //model.addMesh(RenderHelper.CubeLinesMesh(pos[0], pos[1], pos[2], size, size, size, true));
-    //         gr_instance.addNode(new ObjectTreeNodeModel("wtfmesh", model));
-
-    //         const jointText = new RenderTextMesh(`${i}`, true, 10);
-    //         jointText.setOffset(-0.5, -0.5);
-    //         if (vec.Unk00 === 65535) {
-    //             jointText.setColor(1.0, 0.0, 1.0, 0.3);
-    //         } else {
-    //             jointText.setColor(0.0, 1.0, 1.0, 0.3);
-    //         }
-    //         let textNode = new ObjectTreeNodeModel("vectorstrange", jointText);
-    //         textNode.setLocalMatrix(mat);
-    //         gr_instance.addNode(textNode);
-    //     }
-    // }
-
-    let [model, mdlTables] = loadMdlFromAjax(data, false, true);
-    for (let mdlTable of mdlTables) {
-        dataSummary.append(mdlTable);
-    }
-
-    let node = new ObjectTreeNodeModel("model", model);
-    gr_instance.addNode(node);
-
-    // gr_instance.models.push(mdl);
+    gr_instance.models.push(mdl);
     gr_instance.requestRedraw();
 }
 
@@ -868,27 +796,6 @@ function summaryLoadWadTxr(data, wad, nodeid) {
     form.append($('<label>Create new palette for replaced texture. Handy if palette used by multiply textures.</label>'));
 
     dataSummary.append(form);
-}
-
-function summaryLoadWadTxrPs3(data, wad, nodeid) {
-    set3dVisible(false);
-
-    let table = $('<table>');
-    $.each(data, function(k, val) {
-        if (k != 'Images') {
-            table.append($('<tr>')
-                .append($('<td>').append(k))
-                .append($('<td>').append(val)));
-        }
-    });
-
-    dataSummary.append(table);
-    for (let i in data.Images) {
-        dataSummary.append($('<img>')
-            .addClass('no-interpolate')
-            .attr('src', 'data:image/png;base64,' + data.Images[i])
-            .attr('alt', 'mipmap: ' + i));
-    }
 }
 
 function summaryLoadWadMat(data) {
@@ -957,271 +864,50 @@ function summaryLoadWadMat(data) {
     dataSummary.append(table);
 }
 
-function loadCollisionFromAjax(data, wad, nodeid, parentObject = null) {
-    let collisionNode = new ObjectTreeNode("collision");
-
-    const adddebugmaterial = function(model, r, g, b, a) {
-        let renderMaterial = new RenderMaterial();
-        let layer = new RenderMaterialLayer();
-        renderMaterial.setColor([r, g, b, a]);
-        layer.setColor([1, 1, 1, 1]);
-        layer.setMethodAdditive();
-        renderMaterial.addLayer(layer);
-        model.addMaterial(renderMaterial);
-    }
-
-    const loaddebug = function(mdMesh, jointId) {
-        let vertices = [];
-        for (let vec of mdMesh.Vertices) {
-            vertices.push(vec[0], vec[1], vec[2]);
-        }
-        let mesh = new RenderMesh(vertices, mdMesh.Indices, gl.LINES);
-        mesh.setMaskBit(8);
-        mesh.setMaterialID(0);
-        let model = new RenderModel(collisionNode)
-        model.addMesh(mesh);
-        adddebugmaterial(model, 0.7, 0, 0.7, 0.3);
-        let node = new ObjectTreeNodeModel(`mdbg`, model);
-        if (parentObject) {
-            parentObject.joints[jointId].addNode(node);
-        } else {
-            collisionNode.addNode(node);
-        }
-    };
-
+function loadCollisionFromAjax(mdl, data) {
     if (data.ShapeName == "BallHull") {
-        let ball = data.Shape;
-
-        let color = [1.0, 1.0, 1.0];
-        switch (ball.Type) {
-            case 0:
-                color = [1.0, 0.0, 0.0];
-                break;
-            case 1:
-                color = [0.0, 0.0, 1.0];
-                break;
-            case 2:
-                color = [0.0, 1.0, 1.0];
-                break;
-            case 3:
-                color = [0.0, 1.0, 0.0];
-                break;
-        }
-
-        for (let iMesh in ball.Meshes) {
-            let mesh = ball.Meshes[iMesh];
-            
-            let calculatedVertices = [];
-            let calculatedIndices = [];
-            let pointIndices = []; {
-                let planes = [];
-                for (let vec of mesh.Planes) {
-                    planes.push(new Plane([vec[0], vec[1], vec[2]], vec[3]));
-                }
-
-                const [intersections, indices] = Plane.planesIntersectionsEdjes(planes);
-                for (const v of intersections) {
-                    calculatedVertices.push(v[0], v[1], v[2]);
-                }
-                for (const i in intersections) {
-                    pointIndices.push(i);
-                }
-                calculatedIndices = indices;
-            }
-            let calculatedMesh = new RenderMesh(calculatedVertices, calculatedIndices, gl.LINES);
-            calculatedMesh.setMaskBit(4);
-            calculatedMesh.setMaterialID(0);
-            let calculatedPointsMesh = new RenderMesh(calculatedVertices, pointIndices, gl.POINTS);
-            calculatedPointsMesh.setMaskBit(4);
-            calculatedPointsMesh.setMaterialID(0);
-
-            let calculatedModel = new RenderModel(collisionNode)
-            calculatedModel.addMesh(calculatedMesh);
-            calculatedModel.addMesh(calculatedPointsMesh);
-            adddebugmaterial(calculatedModel, color[0], color[1], color[2], 0.3);
-
-            let node = new ObjectTreeNodeModel(`calculated`, calculatedModel);
-            if (parentObject) {
-                parentObject.joints[mesh.Joint].addNode(node);
-            } else {
-                collisionNode.addNode(node);
-            }
-
-            if (ball.DbgMesh) {
-                if (iMesh < ball.DbgMesh.Meshes.length) {
-                    loaddebug(ball.DbgMesh.Meshes[iMesh], mesh.Joint);
-                } else {
-                    console.error("Failed to get dbgmesh for mesh", nodeid, iMesh, ball);
-                }
-            }
-        }
-
-        for (let iBall in ball.Balls) {
-            let b = ball.Balls[iBall];
-
-            const vec = [b.Coord[0], b.Coord[1], b.Coord[2]];
-            const size = b.Coord[3];
-
-            let mesh = RenderHelper.SphereLinesMesh(vec[0], vec[1], vec[2], size, 7, 7);
-            mesh.setMaskBit(4);
-            mesh.setMaterialID(0);
-            let model = new RenderModel();
-            model.addMesh(mesh);
-            adddebugmaterial(model, color[0], color[1], color[2], 0.3);
-
-            let node = new ObjectTreeNodeModel(`ball ${iBall}`, model);
-            if (parentObject) {
-                parentObject.joints[b.Joint].addNode(node);
-            } else {
-                collisionNode.addNode(node);
-            }
-        }
-
-        //let vec = ball.BSphere;
-        //let mesh = grHelper_SphereLines(vec[0], vec[1], vec[2], vec[3], 7, 7, ball.BSphereJoint);
-        //mdl.addMesh(mesh);
-        //mesh.setMaskBit(4);
-    } else if (data.ShapeName == "mCDbgHdr") {
-        for (let mdMesh of data.Shape.Meshes) {
-            loaddebug(mdMesh, 0);
-        }
-    } else if (data.ShapeName == "SheetHdr") {
-        let form = $('<form action="' + getActionLinkForWadNode(wad, nodeid, 'frommodel') + '" method="post" enctype="multipart/form-data">');
-        form.append($('<input type="file" name="model">'));
-        let replaceBtn = $('<input type="button" value="Replace static collision geometry">')
-        replaceBtn.click(function() {
-            let form = $(this).parent();
-            $.ajax({
-                url: form.attr('action'),
-                type: 'post',
-                data: new FormData(form[0]),
-                processData: false,
-                contentType: false,
-                success: function(a1) {
-                    if (a1 !== "") {
-                        alert('Error: ' + a1);
-                    } else {
-                        alert('Success!');
-                        window.location.reload();
-                    }
-                }
-            });
-        });
-        form.append(replaceBtn);
-        dataSummary.append(form);
-
-        let rib = data.Shape;
-
-        for (let materialId = 0; materialId < rib.Some4Materials.length; materialId++) {
-            let material = rib.Some4Materials[materialId];
-
-            let table = $('<table>');
-            table.append($('<tr><td>Name</td><td>' + material.Name + '</td></tr>'));
-            let colorTd = $('<td>');
-            let c = material.EditorColor;
-            table.append($('<tr><td>DebugMat</td><td>' + material.EditorMaterial + '</td></tr>'));
-            colorTd.attr('style', 'background-color: rgb(' +
-                parseInt(c[0] * 255) + ',' + parseInt(c[1] * 255) + ',' + parseInt(c[2] * 255) + ')');
-            table.append($('<tr><td>DebugColor</td></tr>').append(colorTd));
-
-            for (let key in material.Values) {
-                table.append($('<tr><td>' + key + '</td><td>' + material.Values[key] + '</td></tr>'));
-            };
-            dataSummary.append(table);
-
-            let indices = [];
-            let vertices = [];
-            for (let i = 0; i < rib.Some9Points.length; i++) {
-                vertices.push(rib.Some9Points[i][0], rib.Some9Points[i][1], rib.Some9Points[i][2]);
-            }
-            for (let i = 0; i < rib.Some8QuadsIndex.length; i++) {
-                let quad = rib.Some8QuadsIndex[i];
-                if (quad.MaterialIndex == materialId) {
-                    indices.push(quad.Indexes[0], quad.Indexes[1], quad.Indexes[2]);
-                    indices.push(quad.Indexes[3], quad.Indexes[0], quad.Indexes[2]);
-                }
-            }
-            for (let i = 0; i < rib.Some7TrianglesIndex.length; i++) {
-                let triangle = rib.Some7TrianglesIndex[i];
-                if (triangle.MaterialIndex == materialId) {
-                    indices.push(triangle.Indexes[0], triangle.Indexes[1], triangle.Indexes[2]);
-                }
-            }
-
-            let model = new RenderModel();
-            let renderMaterial = new RenderMaterial();
-            renderMaterial.setColor(material.EditorColor);
-
-            let layer = new RenderMaterialLayer();
-            layer.setColor([1, 1, 1, 0.4]);
-            layer.setMethodAdditive();
-            renderMaterial.addLayer(layer);
-
-            model.addMaterial(renderMaterial);
-
-            if (indices.length) {
-                let mesh = new RenderMesh(vertices, indices);
-                mesh.setMaterialID(0);
-                mesh.setMaskBit(7);
-                model.addMesh(mesh);
-            }
-
-            collisionNode.addNode(new ObjectTreeNodeModel("sheet", model));
-        }
+        let vec = data.Shape.Vector;
+        let mesh = grHelper_SphereLines(vec[0], vec[1], vec[2], vec[3] * 2, 7, 7);
+        mdl.addMesh(mesh);
+        mesh.setMaskBit(4);
     }
-    return collisionNode;
 }
 
-function loadObjFromAjax(data, parseScripts = false) {
-    const oNode = new ObjectTreeNodeSkinned("object");
-
-    const joints = data.Data.Joints;
-    for (const iJoint in joints) {
-        const joint = joints[iJoint];
-
-        const jNode = new ObjectTreeNodeSkinJoint(joint.Name, joint.BindToJointMat);
-        jNode.setLocalMatrix(joint.ParentToJoint);
-        if (joint.IsSkinned) {
-            jNode.setBindToJointMatrix(joint.BindToJointMat);
-        }
-
-        if (joint.Parent < 0) {
-            oNode.addNode(jNode);
-        } else {
-            oNode.joints[joint.Parent].addNode(jNode);
-        }
-
-        oNode.addJoint(jNode);
-
-        const jointText = new RenderTextMesh(iJoint, true, 10);
-        jointText.setOffset(-0.5, -0.5);
-        jointText.setColor(1.0, 1.0, 1.0, 0.3);
-        jointText.setMaskBit(1);
-        jNode.addNode(new ObjectTreeNodeModel("label", jointText));
-    }
-
+function loadObjFromAjax(mdl, data, matrix = undefined, parseScripts = true) {
     if (data.Model) {
-        const [model, mdlTables] = loadMdlFromAjax(data.Model, true, true);
-        for (const mdlTable of mdlTables) {
-            // dataSummary.append(mdlTables);
-        }
-        oNode.addNode(new ObjectTreeNodeModel("model", model));
-    }
-    if (data.Collisions) {
-        for (const collision of data.Collisions) {
-            loadCollisionFromAjax(collision, null, null, oNode);
-        }
+        loadMdlFromAjax(mdl, data.Model, parseScripts);
+    } else if (data.Collision) {
+        loadCollisionFromAjax(mdl, data.Collision);
     }
 
     if (data.Script) {
         if (data.Script.TargetName == "SCR_Entities") {
             $.each(data.Script.Data.Array, function(entity_id, entity) {
-                let entityNode = new ObjectTreeNode();
-                entityNode.setLocalMatrix(new Float32Array(data.Data.Joints[0].RenderMat));
+                let objMat = new Float32Array(data.Data.Joints[0].RenderMat);
+                let entityMat = new Float32Array(entity.Matrix);
 
-                let text3d = new RenderTextMesh("\x05" + entity.Name, true);
+                if (matrix) {
+                    // obj = obj * transformMat
+                    objMat = mat4.mul(mat4.create(), matrix, objMat);
+                }
+                // mat = obj * entity
+                let mat = mat4.mul(mat4.create(), objMat, entityMat);
+
+                let pos = mat4.getTranslation(vec3.create(), mat);
+
+                let radius = entity.Matrix[0];
+                let text3d = new grTextMesh("\x05" + entity.Name, pos[0], pos[1], pos[2], true);
                 text3d.setOffset(-0.5, -0.5);
                 text3d.setMaskBit(3);
+
+                let entityHelperModel = new grModel();
+                let entityRadius = Math.max(10, Math.abs(radius || 40));
+                if (typeof grHelper_SphereLines === 'function') {
+                    let entityMesh = grHelper_SphereLines(pos[0], pos[1], pos[2], entityRadius, 8, 12);
+                    entityMesh.setMaskBit(3);
+                    entityHelperModel.addMesh(entityMesh);
+                    gr_instance.models.push(entityHelperModel);
+                }
 
                 let alpha = 1;
                 switch (entity_id % 3) {
@@ -1235,25 +921,23 @@ function loadObjFromAjax(data, parseScripts = false) {
                         text3d.setColor(1, 1, 0, alpha);
                         break;
                 }
-
-                oNode.addNode(new ObjectTreeNodeModel("entity", text3d));
+                // entity helper sphere is pushed above when SCR_Entities is present
+                gr_instance.texts.push(text3d);
             });
         }
     }
 
-    oNode.addNode(new ObjectTreeNodeModel("tree", RenderHelper.SkeletLines(joints)));
-
-    return oNode;
+    mdl.loadSkeleton(data.Data.Joints);
+    if (matrix) {
+        mdl.matrix = matrix;
+    }
 }
 
 function summaryLoadWadObj(data, wad, nodeid) {
     gr_instance.cleanup();
 
-    set3dVisible(true);
-    const oNode = loadObjFromAjax(data);
-
-    let dumplinkgltf = getActionLinkForWadNode(wad, nodeid, 'gltf');
-    dataSummary.append($('<a class="center">').attr('href', dumplinkgltf).append('Download .glb bin glTF 2.0'));
+    let dumplink = getActionLinkForWadNode(wad, nodeid, 'zip');
+    dataSummary.append($('<a class="center">').attr('href', dumplink).append('Download .zip(obj+mtl+png)'));
 
     let jointsTable = $('<table>');
 
@@ -1271,7 +955,7 @@ function summaryLoadWadObj(data, wad, nodeid) {
                             case 0:
                                 let $option = $("<option>").text(group.Name + ": " + act.Name);
                                 $option.dblclick([anim, act, dt, data.Data], function(ev) {
-                                    let anim = new AnimationObjectSkelet(ev.data[0], ev.data[1], ev.data[2], ev.data[3], oNode);
+                                    let anim = new gaObjSkeletAnimation(ev.data[0], ev.data[1], ev.data[2], ev.data[3], gr_instance.models[0]);
                                     ga_instance.addAnimation(anim);
                                 });
 
@@ -1284,7 +968,7 @@ function summaryLoadWadObj(data, wad, nodeid) {
 
         }
 
-        let $stopAnim = $("<button>").text("stop anim");
+        let $stopAnim = $("<button>").text("> stop anim <").css("margin-left", "10%");
         $stopAnim.click(function() {
             let anims = ga_instance.objSkeletAnimations;
             for (let i in anims) {
@@ -1295,52 +979,24 @@ function summaryLoadWadObj(data, wad, nodeid) {
         dataSummary.append($animSelector).append($stopAnim);
     }
 
-    dataSummary.append($("<div>").text("File0x20: " + (data.Data.File0x20 >>> 0).toString(2)));
-    dataSummary.append($("<div>").text("File0x24: " + (data.Data.File0x24 >>> 0).toString(2)));
-
     $.each(data.Data.Joints, function(joint_id, joint) {
         let row = $('<tr>').append($('<td>').attr('style', 'background-color:rgb(' +
                 parseInt((joint.Id % 8) * 15) + ',' +
                 parseInt(((joint.Id / 8) % 8) * 15) + ',' +
                 parseInt(((joint.Id / 64) % 8) * 15) + ');')
-            .append(joint.Id).attr("rowspan", 13));
-
-        let firstRow = true;
+            .append(joint.Id).attr("rowspan", 7 * 2));
 
         for (let k in joint) {
             if (k === "Name" ||
                 k === "IsSkinned" ||
-                k === "IsExternal" ||
                 k === "OurJointToIdleMat" ||
                 k === "ParentToJoint" ||
                 k === "BindToJointMat" ||
                 k === "RenderMat" ||
                 k === "Parent") {
-
-                let d = joint[k];
-                if (Array.isArray(d) && d.length == 4 * 4) {
-                    row.append($('<td>').text(k));
-                    jointsTable.append(row);
-
-                    let t = [d[12].toFixed(1), d[13].toFixed(1), d[14].toFixed(1)];
-                    let s = [d[0].toFixed(2), d[5].toFixed(2), d[10].toFixed(2), d[15].toFixed(2)];
-
-                    let ry = Math.asin(d[8]).toFixed(2);
-                    let rx = Math.atan2(-d[9] / Math.cos(ry), +d[10] / Math.cos(ry)).toFixed(2);
-                    let rz = Math.atan2(-d[4] / Math.cos(ry), +d[0] / Math.cos(ry)).toFixed(2);
-
-                    let appRow = function(name, arr) {
-                        jointsTable.append($('<tr>').append($('<td>').text(name + ":" + arr.join(","))));
-                    }
-
-                    appRow("t", [d[12].toFixed(2), d[13].toFixed(2), d[14].toFixed(2)]);
-                    appRow("r", [rx, ry, rz]);
-                    appRow("s", [d[0].toFixed(2), d[5].toFixed(2), d[10].toFixed(2), d[15].toFixed(2)]);
-                } else {
-                    row.append($('<td>').text(k + ": " + JSON.stringify(d)));
-                    jointsTable.append(row);
-                }
-
+                row.append($('<td>').text(k));
+                jointsTable.append(row);
+                jointsTable.append($('<tr>').append($('<td>').text(JSON.stringify(joint[k]))));
                 row = $('<tr>');
             }
         }
@@ -1348,99 +1004,77 @@ function summaryLoadWadObj(data, wad, nodeid) {
     });
     dataSummary.append(jointsTable);
 
-    gr_instance.addNode(oNode);
-    gr_instance.requestRedraw();
-}
+    if (data.Model || data.Collision) {
+        set3dVisible(true);
 
-function loadGameObjectFromAjax(inst, parseScripts = true) {
-    let instNode = new ObjectTreeNode(inst.Name);
+        let mdl = new grModel();
+        loadObjFromAjax(mdl, data);
 
-    const text3d = new RenderTextMesh("\x04" + inst.Name, true);
-    text3d.setOffset(-0.5, -0.5);
-    text3d.setColor(1.0, 1.0, 1.0, 0.8);
-    text3d.setMaskBit(6);
-
-    if (inst.IsGow2) {
-        let instMat = mat4.fromTranslation(mat4.create(), inst.Position);
-        // instNode.setLocalMatrix(instMat);
-
-        let text = new ObjectTreeNodeModel("label", text3d);
-        text.setLocalMatrix(instMat);
-        instNode.addNode(text);
-
+        gr_instance.models.push(mdl);
+        gr_instance.requestRedraw();
     } else {
-        const rs = (180.0 / Math.PI);
-        let rot = quat.fromEuler(quat.create(), inst.Rotation[0] * rs, inst.Rotation[1] * rs, inst.Rotation[2] * rs);
-        const scale = inst.Rotation[3];
-
-        let instMat = mat4.fromRotationTranslationScale(mat4.create(), rot, inst.Position1, [scale, scale, scale]);
-
-        if (inst.Position1[3] != 1.0) {
-            console.warn("posmulincorrect", inst);
-        }
-        
-        instNode.addNode(new ObjectTreeNodeModel("label", text3d));
-        instNode.setLocalMatrix(instMat);
+        set3dVisible(false);
     }
-
-    if (inst.Object) {
-        const oNode = loadObjFromAjax(inst.Object, parseScripts);
-        instNode.addNode(oNode);
-    }
-
-    return instNode;
 }
 
 
-function summaryLoadWadGameObject(data, parseScripts = true) {
+function summaryLoadWadGameObject(data) {
     gr_instance.cleanup();
-    dataSummary.empty();
-    set3dVisible(true);
-
-    const node = loadGameObjectFromAjax(data, parseScripts);
-
+    set3dVisible(false);
     let table = $('<table>');
     for (let k in data) {
-        if (k != "Object") {
-            table.append($('<tr>').append($('<td>').text(k)).append($('<td>').text(JSON.stringify(data[k]))));
-        }
+        table.append($('<tr>').append($('<td>').text(k)).append($('<td>').text(JSON.stringify(data[k]))));
     }
     dataSummary.append(table);
-
-    gr_instance.addNode(node);
-    gr_instance.flushScene();
-    gr_instance.requestRedraw();
 }
 
 function loadCxtFromAjax(data, parseScripts = true) {
-    let cxtNode = new ObjectTreeNode(data.Name);
-
     for (let i in data.Instances) {
         let inst = data.Instances[i];
-        let instNode = loadGameObjectFromAjax(inst, false, parseScripts);
-        cxtNode.addNode(instNode);
-    }
+        let obj = data.Objects[inst.Object];
 
-    return cxtNode;
+        let rs = 180.0 / Math.PI;
+        let rot = quat.fromEuler(quat.create(), inst.Rotation[0] * rs, inst.Rotation[1] * rs, inst.Rotation[2] * rs);
+
+        //let instMat = mat4.fromTranslation(mat4.create(), inst.Position1);
+        //instMat = mat4.mul(mat4.create(), instMat, mat4.fromQuat(mat4.create(), rot));
+        // same as above
+        let instMat = mat4.fromRotationTranslation(mat4.create(), rot, inst.Position1);
+        //let instMat = mat4.fromQuat(mat4.create(), rot);
+
+        //console.log(inst.Object, instMat);
+        //if (obj && (obj.Model || (obj.Collision && inst.Object.includes("deathzone")))) {
+        //if (obj && (obj.Model)) {
+        if (obj && (obj.Model || obj.Collision)) {
+            let mdl = new grModel();
+            loadObjFromAjax(mdl, obj, instMat, parseScripts);
+
+            for (let iScript in inst.Scripts) {
+                let scr = inst.Scripts[iScript];
+                switch (scr.TargetName) {
+                    case "SCR_Sky":
+                        case "SCR_AresSky":
+                        mdl.setType("sky");
+                        break;
+                    default:
+                        console.warn("Unknown SCR target: " + scr.TargetName, data, inst, scr);
+                        break;
+                }
+            }
+
+            gr_instance.models.push(mdl);
+        }
+    }
 }
 
 function summaryLoadWadCxt(data, wad, nodeid) {
     if (!gw_cxt_group_loading) {
         gr_instance.cleanup();
-        dataSummary.empty();
-
-        let dumplinkgltf = getActionLinkForWadNode(wad, nodeid, 'gltf');
-        dataSummary.append($('<a class="center">').attr('href', dumplinkgltf).append('Baixar Modelo .glb bin glTF 2.0'));
-    } else {
-        let dumplinkgltf = getActionLinkForWadNode(wad, nodeid, 'gltf_all');
-        dataSummary.append($('<a class="center">').attr('href', dumplinkgltf).append('Baixar Modelo .glb bin glTF 2.0'));
     }
 
     if ((data.Instances !== null && data.Instances.length) || gw_cxt_group_loading) {
         set3dVisible(true);
-        const node = loadCxtFromAjax(data);
-        gr_instance.addNode(node);
-        gr_instance.flushScene();
+        loadCxtFromAjax(data);
         gr_instance.requestRedraw();
     } else {
         set3dVisible(false);
@@ -1460,74 +1094,12 @@ function summaryLoadWadSbk(data, wad, nodeid) {
         };
 
         let vaglink = $("<a>").append(snd.Name).attr('href', getSndLink('vag'));
-        let li = $("<li>").append(vaglink).append(" id:" + i + " stream id:" + snd.StreamId);
+        let wavlink = $("<audio controls>").attr("preload", "none").append($("<source>").attr("src", getSndLink('wav')));
+
+        let li = $("<li>").append(vaglink);
 
         if (data.IsVagFiles) {
-            let wavplayer = $("<source>").attr("src", getSndLink('wav'));
-            let wavlink = $("<audio controls>").attr("preload", "none").append(wavplayer);
             li.append("<br>").append(wavlink);
-        } else {
-            let commands = $("<table>");
-            let banksound = data.Bank.BankSounds[snd.StreamId];
-
-            let banksoundsNoCommand = {};
-            for (let key in banksound) {
-                if (key != 'Commands') {
-                    banksoundsNoCommand[key] = banksound[key];
-                }
-            }
-
-            commands.append($("<tr>").append(
-                $("<td>").text("Parameters")).append(
-                $("<td>").attr("colspan", 2).text(JSON.stringify(banksoundsNoCommand))
-            ));
-
-            let cmdRow = $("<tr>").append($("<td>").text("Commands").attr("rowspan", banksound.Commands.length));
-            for (let command of banksound.Commands) {
-                let commandClean = {};
-                for (let key in command) {
-                    if (key != 'SampleRef' && key != 'Cmd' && key != 'VagRef' && key != 'UnkRef') {
-                        commandClean[key] = command[key];
-                    }
-                }
-
-                let argsCol = $("<td>").text(JSON.stringify(commandClean));
-                if (command.SampleRef != null) {
-                    let sampleRef = command.SampleRef;
-
-                    let sampleRefClean = {};
-                    for (let key in sampleRef) {
-                        if (key != 'AdpcmOffset' && key != 'AdpcmSize') {
-                            sampleRefClean[key] = sampleRef[key];
-                        }
-                    }
-
-                    argsCol.append($("<br>")).append("Sample:");
-                    argsCol.append($("<br>")).append(JSON.stringify(sampleRefClean));
-
-                    let sndurl = getActionLinkForWadNode(wad, nodeid, 'smpd',
-                        'offset=' + sampleRef.AdpcmOffset + '&size=' + sampleRef.AdpcmSize);
-                    let wavplayer = $("<source>").attr("src", sndurl);
-                    let wavlink = $("<audio controls>").attr("preload", "none").append(wavplayer);
-
-                    argsCol.append($("<br>")).append("Audio offset " + sampleRef.AdpcmOffset + " size " + sampleRef.AdpcmSize);
-                    argsCol.append($("<br>")).append(wavlink);
-                }
-                if (command.VagRef != null) {
-                    let vagRef = command.VagRef;
-                    argsCol.append($("<br>")).append("ref: " + JSON.stringify(vagRef));
-                }
-                if (command.UnkRef != null) {
-                    let unkRef = command.UnkRef;
-                    argsCol.append($("<br>")).append("ref: " + JSON.stringify(unkRef));
-                }
-
-                cmdRow.append($("<td>").text(command.Cmd)).append(argsCol);
-                commands.append(cmdRow);
-                cmdRow = $("<tr>");
-            }
-
-            li.append(commands);
         }
         list.append(li);
     }
@@ -1558,69 +1130,41 @@ function summaryLoadWadGeomShape(data) {
         m_indexes[j + 2] = v.Indexes[2];
     }
 
-    let mdl = new RenderModel();
-    mdl.addMesh(new RenderMesh(m_vertexes, m_indexes));
+    let mdl = new grModel();
+    mdl.addMesh(new grMesh(m_vertexes, m_indexes));
 
     gr_instance.models.push(mdl);
     gr_instance.requestRedraw();
 }
 
-function summaryLoadWadScript(data, wad, tagid) {
+function summaryLoadWadScript(data) {
     gr_instance.cleanup();
 
     dataSummary.append($("<h3>").append("Scirpt " + data.TargetName));
 
     if (data.TargetName == 'SCR_Entities') {
-        let asJsonButton = $('<button>').text("Download as json").click(function() {
-            window.open(getActionLinkForWadNode(wad, tagid, 'dataasjson'), '_blank');
-        });
-        dataSummary.append($('<p>').append(asJsonButton));
-
-        let uploadFromJsonButton = $('<button>').text("Upload from json");
-        uploadFromJsonButton.attr("href", getActionLinkForWadNode(wad, tagid, 'datafromjson'));
-        uploadFromJsonButton.click(function() {
-            console.log($(this).attr('href'));
-            uploadAjaxHandler.call(this);
-        });
-        dataSummary.append($('<p>').append(uploadFromJsonButton));
-
         for (let i in data.Data.Array) {
             let e = data.Data.Array[i];
 
             let ht = $("<table>").append($("<tr>").append($("<td>").attr("colspan", 2).append(e.Name)));
             for (let j in e) {
                 let v = e[j];
-                switch (j) {
-                    case "Variables":
-                        for (let hi in v) {
-                            ht.append(
-                                $("<tr>").append($("<td>").append(
-                                    'Variable name #' + (parseInt(hi) + e.PhysicsObjectId)))
-                                .append($("<td>").append(v[hi].Name + " (type " + v[hi].Type + ")")));
-                        }
-                        break;
-                    case "Handlers":
-                        for (let ha of v) {
-                            ht.append(
-                                $("<tr>").append($("<td>").append('Handler #' + ha.Id))
-                                .append($("<td style='white-space: pre;'>").append(ha.Decompiled.join('<br>'))));
-                        }
-                        break;
-                    case "DebugTargetEntitiesNames":
-                    case "DebugReferencedByNames":
-                        ht.append($("<tr>").append($("<td>").append(j)).append($("<td>").append(v.join('<br>'))));
-                        break;
-                    case "Matrix":
-                    case "DebugReferencedBy":
-                    case "TargetEntitiesIds":
-                        v = JSON.stringify(v);
-                        ht.append($("<tr>").append($("<td>").append(j)).append($("<td>").append(v)));
-                        break;
-                    case "Name":
-                        break;
-                    default:
-                        ht.append($("<tr>").append($("<td>").append(j)).append($("<td>").append(v)));
-                        break;
+                if (j == "Handlers") {
+                    for (let hi in v) {
+                        ht.append(
+                            $("<tr>").append($("<td>").append('Handler #' + hi))
+                            .append($("<td>").append(v[hi].Decompiled.replaceAll('\n', '<br>'))));
+                    }
+                } else {
+                    switch (j) {
+                        case "Matrix":
+                        case "DependsEntitiesIds":
+                            v = JSON.stringify(v);
+                            break;
+                    }
+                    ht.append(
+                        $("<tr>").append($("<td>").append(j))
+                        .append($("<td>").append(v)));
                 }
             }
             dataSummary.append(ht);
@@ -1630,149 +1174,838 @@ function summaryLoadWadScript(data, wad, tagid) {
     set3dVisible(false);
 }
 
+function summaryLoadWadFlp(flp, wad, tagid) {
+    let flpdata = flp.FLP;
+    let flp_print_dump = function() {
+        set3dVisible(true);
+        dataSummary.empty();
+        dataSummary.append($("<pre>").append(JSON.stringify(flpdata, null, "  ").replaceAll('\n', '<br>')));
+    }
 
-function summaryLoadWadRSRCS(data, wad, nodeid) {
-    set3dVisible(false);
+    let flp_scripts_strings = function() {
+        set3dVisible(false);
+        dataSummary.empty();
 
-    let list = $("<ul>");
+        let tbody = $("<tbody>");
+        for (let iRef in flp.ScriptPushRefs) {
+            let tr = $("<tr>");
+            let ref = flp.ScriptPushRefs[iRef];
 
-    let newRSRCSWAd = function(name) {
-        let text = $("<span>").text(name);
-        let delbtn = $("<button>").text("remove").click(function() {
-            $(this).parent().remove();
-        });
+            let str = atob(ref.String);
+            if (flp.FontCharAliases) {
+                let originalStr = str;
+                str = "";
+                for (let i = 0; i < originalStr.length; i++) {
+                    let charCode = originalStr.charCodeAt(i);
+                    let replaced = false;
 
+                    for (let charToReplace in flp.FontCharAliases) {
+                        if (flp.FontCharAliases[charToReplace] === charCode) {
+                            str += String.fromCharCode(charToReplace);
+                            replaced = true;
+                            break;
+                        }
+                    }
 
-        list.append($('<li>').append(text).append(delbtn));
-    };
-
-    $.each(data.Wads, function(k, val) {
-        newRSRCSWAd(val);
-    });
-
-    let addWad = $("<input type='text' placeholder='wadname'>");
-    let addBtn = $("<button>").text("add").click(function() {
-        newRSRCSWAd(addWad.val());
-    })
-
-    let saveBtn = $("<button>").text("save").click(function() {
-        let params = {};
-        $("ul").find("li span").each(function(k, v) {
-            params["wad" + k] = $(v).text();
-        });
-
-        $.ajax({
-            url: getActionLinkForWadNode(wad, nodeid, 'update'),
-            data: params,
-            success: function(a) {
-                if (a != "" && a.error) {
-                    alert("Error: " + a.error);
-                } else {
-                    alert("Success");
+                    if (replaced === false) {
+                        str += String.fromCharCode(charCode);
+                    }
                 }
             }
-        });
-    });
 
-    dataSummary.append(addWad).append(addBtn).append(list).append(saveBtn);
-}
+            tr.append($("<td>").text(iRef));
+            tr.append($("<td>").append($("<input type=text>").val(str).css("width", "100%")));
+            tr.append($("<td>").append($("<button>").text("Update").click(
+                function(ev) {
+                    let str = $(this).parent().parent().find('input[type="text"]').val();
+                    let id = Number.parseInt($(this).parent().parent().children().first().text());
 
-function summaryLoadWadTWK(data, wad, nodeid) {
-    set3dVisible(false);
+                    if (flp.FontCharAliases) {
+                        let originalStr = str;
+                        str = "";
+                        for (let char of originalStr) {
+                            if (flp.FontCharAliases.hasOwnProperty(char.charCodeAt(0))) {
+                                str += String.fromCharCode(flp.FontCharAliases[char.charCodeAt(0)]);
+                            } else {
+                                str += char;
+                            }
+                        }
+                    }
 
-    let table = $("<table>");
-    let twk = data;
+                    $.ajax({
+                        url: getActionLinkForWadNode(wad, tagid, 'scriptstring'),
+                        data: {
+                            'id': id,
+                            'string': btoa(str)
+                        },
+                        success: function(a) {
+                            if (a != "" && a.error) {
+                                alert("Error: " + a.error);
+                            } else {
+                                alert("Success");
+                            }
+                        }
+                    });
+                }
+            )));
+            tbody.append(tr);
+        }
 
-    let dumpYamlLink = getActionLinkForWadNode(wad, nodeid, 'asyaml');
+        let headtr = $("<tr>");
+        headtr.append($("<td>").text("Id"));
+        headtr.append($("<td>").text("Text"));
+        headtr.append($("<td>"));
 
-    let info = $("<ul>");
-    info.append($("<li>").append("Name: " + twk.Name));
-    info.append($("<li>").append("MagicHeaderPresened: " + twk.MagicHeaderPresened));
-    info.append($("<li>").append("HeaderStrangeMagicUid: " + twk.HeaderStrangeMagicUid));
-    info.append($("<li>").append($("<a>").attr('href', dumpYamlLink).append("Baixar arquivo como .yaml")));
-    dataSummary.append(info);
+        dataSummary.append($("<table>").width("100%").append($("<thead>").append(headtr)).append(tbody));
+    }
 
-    let form = $('<form action="' + getActionLinkForWadNode(wad, nodeid, 'fromyaml') + '" method="post" enctype="multipart/form-data">');
-    form.append($('<input type="file" name="data">'));
-    let replaceBtn = $('<input type="button" value="Carregar arquivo yaml">')
-    replaceBtn.click(function() {
-        let form = $(this).parent();
-        $.ajax({
-            url: form.attr('action'),
-            type: 'post',
-            data: new FormData(form[0]),
-            processData: false,
-            contentType: false,
-            success: function(a1) {
-                if (a1 !== "") {
-                    alert('Error: ' + a1);
+    let print_static_label_as_tr = function(iSl, needref = true) {
+        let sl = flpdata.StaticLabels[iSl];
+        let row = $("<tr>");
+
+        if (needref) {
+            row.append($("<td>").append($("<a>").addClass('flpobjref').text("id " + iSl).click(function() {
+                flp_obj_view_history.unshift({
+                    TypeArrayId: 4,
+                    IdInThatTypeArray: iSl
+                });
+                flp_view_object_viewer();
+            })));
+        }
+
+        let font = undefined;
+        let cmdsContainer = $("<td>");
+        for (let iCmd in sl.RenderCommandsList) {
+            let rcmds = $("<table width='100%'>");
+            let cmd = sl.RenderCommandsList[iCmd];
+
+            if (cmd.Flags & 8) {
+                let fhi = $("<input type=text id='fonthandler' class=no-width>").val(cmd.FontHandler);
+                let fsi = $("<input type=text id='fontscale' class=no-width>").val(cmd.FontScale);
+                let $link = $("<a>").addClass('flpobjref').text("handler ").click(function() {
+                    flp_obj_view_history.unshift({
+                        TypeArrayId: 3,
+                        IdInThatTypeArray: cmd.FontHandler
+                    });
+                    flp_view_object_viewer();
+                })
+                rcmds.append($("<tr>").append($("<td>").text("Set font")).append($("<td>").append($link).append("#").append(fhi).append(" with scale ").append(fsi)));
+                font = flpdata.Fonts[flpdata.GlobalHandlersIndexes[cmd.FontHandler].IdInThatTypeArray];
+            }
+            if (cmd.Flags & 4) {
+                let bclri = $("<input type=text id='blendclr'>").val(JSON.stringify(cmd.BlendColor));
+                rcmds.append($("<tr>").append($("<td>").text("Set blend color")).append($("<td>").append(bclri)));
+            }
+            let xoi = $("<input type=text id='xoffset'>").val(cmd.OffsetX);
+            rcmds.append($("<tr>").append($("<td>").text("Set X offset")).append($("<td>").append(xoi)));
+            let yoi = $("<input type=text id='yoffset'>").val(cmd.OffsetY);
+            rcmds.append($("<tr>").append($("<td>").text("Set Y offset")).append($("<td>").append(yoi)));
+
+            let str = cmd.Glyphs.reduce(function(str, glyph) {
+                let char = font.CharNumberToSymbolIdMap.indexOf(glyph.GlyphId);
+                if (flp.FontCharAliases) {
+                    let map_chars = Object.keys(flp.FontCharAliases).filter(function(charString) {
+                        return flp.FontCharAliases[charString] == char;
+                    });
+                    if (map_chars && map_chars.length !== 0) {
+                        char = map_chars[0];
+                    }
+                }
+                return str + (char > 0 ? String.fromCharCode(char) : ("$$" + glyph.GlyphId));
+            }, '');
+
+            rcmds.append($("<tr>").append($("<td>").text("Print glyphs")).append($("<td>").append($("<textarea>").val(str))));
+            cmdsContainer.append(rcmds);
+        }
+
+        let open_preview_for_label = function(sl) {
+            let u = new URLSearchParams();
+            u.append('c', JSON.stringify(sl.RenderCommandsList));
+            u.append('f', wad);
+            u.append('r', tagid);
+
+            let t = sl.Transformation;
+            let m = t.Matrix;
+            u.append('m', JSON.stringify([m[0], m[1], 0, 0, m[2], m[3], 0, 0, 0, 0, 1, 0, t.OffsetX, t.OffsetY, 0, 1]));
+            window.open('/label.html?' + u, '_blank');
+        }
+
+        let get_label_from_table_tr = function(tr) {
+            let sl = {
+                'Transformation': JSON.parse(tr.find("td").last().text()),
+                'RenderCommandsList': [],
+            };
+
+            let fontscale = 1.0;
+            let fonthandler = -1;
+            tr.find("table").each(function(cmdIndex, tbl) {
+                let cmd = {
+                    'Flags': 0
+                };
+                $(tbl).find("tr").each(function(i, row) {
+                    let rname = $(row).find("td").first().text();
+                    if (rname.includes("font")) {
+                        cmd.Flags |= 8;
+                        cmd.FontHandler = Number.parseInt($(row).find("#fonthandler").val());
+                        cmd.FontScale = Number.parseFloat($(row).find("#fontscale").val());
+                        fonthandler = cmd.FontHandler;
+                        fontscale = cmd.FontScale;
+                    } else if (rname.includes("blend")) {
+                        cmd.Flags |= 4;
+                        cmd.BlendColor = JSON.parse($(row).find("#blendclr").val());
+                    } else if (rname.includes("X offset")) {
+                        cmd.OffsetX = Number.parseFloat($(row).find("#xoffset").val());
+                        if (Math.abs(cmd.OffsetX) > 0.000001) {
+                            cmd.Flags |= 2;
+                        }
+                    } else if (rname.includes("Y offset")) {
+                        cmd.OffsetY = Number.parseFloat($(row).find("#yoffset").val());
+                        if (Math.abs(cmd.OffsetY) > 0.000001) {
+                            cmd.Flags |= 1;
+                        }
+                    } else if (rname.includes("glyphs")) {
+                        let text = $(row).find("textarea").val();
+                        let glyphs = [];
+
+                        let font = flpdata.Fonts[flpdata.GlobalHandlersIndexes[fonthandler].IdInThatTypeArray];
+                        for (let char of text) {
+                            let charCode = char.charCodeAt(0);
+                            if (flp.FontCharAliases) {
+                                if (flp.FontCharAliases.hasOwnProperty(charCode)) {
+                                    charCode = flp.FontCharAliases[charCode];
+                                }
+                            }
+                            let glyphId = font.CharNumberToSymbolIdMap[charCode];
+                            let width = font.SymbolWidths[glyphId] * fontscale;
+                            glyphs.push({
+                                'GlyphId': glyphId,
+                                'Width': width / 16
+                            });
+                        }
+                        cmd.Glyphs = glyphs;
+                    }
+                });
+                sl.RenderCommandsList.push(cmd);
+            })
+            return sl;
+        }
+
+        let btns = $("<div>");
+        btns.append($("<button>peview original</button>").click(sl, function(e) {
+            open_preview_for_label(e.data);
+        }));
+        btns.append($("<br>"));
+        btns.append($("<button>preview changes</button>").click(function(e) {
+            open_preview_for_label(get_label_from_table_tr($(this).parent().parent().parent()));
+        }));
+        btns.append($("<br>"));
+        btns.append($("<button>apply changes</button>").click(iSl, function(e) {
+            let sl = get_label_from_table_tr($(this).parent().parent().parent());
+
+            $.post({
+                url: getActionLinkForWadNode(wad, tagid, 'staticlabels'),
+                data: {
+                    'id': e.data,
+                    'sl': JSON.stringify(sl)
+                },
+                success: function(a) {
+                    if (a != "" && a.error) {
+                        alert('Error uploading: ' + a.error);
+                    } else {
+                        alert('Success!');
+                    }
+                }
+            });
+
+        }));
+
+        row.append($("<td>").append(cmdsContainer));
+        row.append($("<td>").append(btns));
+        row.append($("<td>").text(JSON.stringify(sl.Transformation)));
+        return row;
+    }
+
+    let flp_list_labels = function() {
+        set3dVisible(false);
+        dataSummary.empty();
+
+        let table = $("<table class='staticlabelrendercommandlist'>");
+        table.append($("<tr>").append($("<td>").text("Id")).append($("<td>").text("Render commands")));
+
+        for (let iSl in flpdata.StaticLabels) {
+            table.append(print_static_label_as_tr(iSl));
+        }
+
+        dataSummary.append(table);
+    }
+
+    let flp_view_object_viewer = function() {
+        dataSummary.empty();
+        gr_instance.cleanup();
+        set3dVisible(false);
+        let $history_element = $("<div>").css('margin', '7px').css('white-space', 'nowrap').css('overflow', 'hidden');
+        let $data_element = $("<div>");
+        const objNamesArray = ['Nothing', 'Textured mesh part', 'UNKNOWN', 'Font',
+            'Static label', 'Dynamic label', 'Data6', 'Data7',
+            'Root', 'Transform', 'Color'
+        ];
+
+        let element_view = function(h) {
+            let get_obj_arr_by_id = function(t) {
+                switch (t) {
+                    case 1:
+                        return flpdata.MeshPartReferences;
+                        break;
+                    case 3:
+                        return flpdata.Fonts;
+                        break;
+                    case 4:
+                        return flpdata.StaticLabels;
+                        break;
+                    case 5:
+                        return flpdata.DynamicLabels;
+                        break;
+                    case 6:
+                        return flpdata.Datas6;
+                        break;
+                    case 7:
+                        return flpdata.Datas7;
+                        break;
+                    case 9:
+                        return flpdata.Transformations;
+                        break;
+                    case 10:
+                        return flpdata.BlendColors;
+                        break;
+                };
+                return undefined;
+            };
+
+            let get_obj_by_handler = function(h) {
+                if (h.TypeArrayId == 8) {
+                    return flpdata.Data8;
                 } else {
-                    alert('Success!');
-                    window.location.reload();
+                    let arr = get_obj_arr_by_id(h.TypeArrayId);
+                    if (arr) {
+                        return arr[h.IdInThatTypeArray];
+                    } else {
+                        return undefined;
+                    }
                 }
             }
-        });
-    });
-    form.append(replaceBtn);
-    dataSummary.append(form);
 
-    let valueView = function(value) {
-        let bytes = Uint8Array.from(atob(value), c => c.charCodeAt(0));
-        let view = new DataView(bytes.buffer, 0);
-        let asString = '';
-        for (let c of bytes) {
-            if (c == 0) {
+            $data_element.empty();
+            if (h == undefined) {
+                h = flp_obj_view_history[0];
+            } else {
+                flp_obj_view_history.unshift(h);
+            }
+
+            {
+                $history_element.empty();
+                $history_element.append($("<span>").text("History: ").css('padding', '6px'));
+                let new_history = [h];
+                for (let i in flp_obj_view_history) {
+                    if (i != 0) {
+                        if (flp_obj_view_history[i].IdInThatTypeArray != h.IdInThatTypeArray ||
+                            flp_obj_view_history[i].TypeArrayId != h.TypeArrayId) {
+                            new_history.push(flp_obj_view_history[i]);
+                        }
+                    }
+                }
+                flp_obj_view_history = new_history;
+                if (flp_obj_view_history.length > 16) {
+                    flp_obj_view_history.shift();
+                }
+                for (let i in flp_obj_view_history) {
+                    let h = flp_obj_view_history[i];
+                    let $a = $("<a>").text(objNamesArray[h.TypeArrayId] + "[" + h.IdInThatTypeArray + "] ");
+                    $a.addClass('flpobjref').click(function() {
+                        element_view(flp_obj_view_history[i]);
+                    });
+                    if (i == 0) {
+                        $history_element.append(" > ", $a.css('color', 'white'), " <");
+                    } else {
+                        $history_element.append(" | ", $a);
+                    }
+                }
+            }
+
+            let obj = get_obj_by_handler(h);
+
+            let _row = function() {
+                return $("<tr>").append(Array.prototype.slice.call(arguments));
+            }
+
+            let _column = function() {
+                return $("<td>").append(Array.prototype.slice.call(arguments));
+            }
+
+            let print_ref_handler = function(handler) {
+                let $a = $("<a>").text('&' + objNamesArray[handler.TypeArrayId] + '[' + handler.IdInThatTypeArray + ']')
+                $a.addClass('flpobjref');
+                $a.click(function() {
+                    element_view(handler);
+                });
+                switch (handler.TypeArrayId) {
+                    case 1:
+                        let mats = [];
+                        let meshref = get_obj_by_handler(handler);
+                        for (let i in meshref.Materials) {
+                            let matname = meshref.Materials[i].TextureName;
+                            if (matname != "") {
+                                mats.push(matname);
+                            }
+                        }
+                        if (mats.length != 0) {
+                            return $("<div>").append($a, " (meshpart " + meshref.MeshPartIndex + ", textures: " + mats.join(",") + ")");
+                        } else {
+                            return $("<div>").append($a, " (meshpart " + meshref.MeshPartIndex + ", no textures used)");
+                        }
+                        break;
+                    case 9:
+                        let t = get_obj_by_handler(handler);
+                        return $("<div>").append($a, " (x: ", t.OffsetX, " y: ", t.OffsetY, ")");
+                    case 10:
+                        let clr = get_obj_by_handler(handler).Color;
+                        let css_rgb = "rgb(" + (clr[0] / 256.0) * 255 + "," + (clr[1] / 256.0) * 255 + "," + (clr[2] / 256.0) * 255;
+                        let $rgb = $("<div>").addClass('flpcolorpreview').css('background-color', css_rgb);
+                        let $rgba = $("<div>").addClass('flpcolorpreview').css('background-color', css_rgb).css('opacity', clr[3] / 256.0);
+                        return $("<div>").append($a, " (without alpha: ", $rgb, " with alpha: ", $rgba, "  a: ", clr[3], ")");
+                        break;
+                }
+                return $a;
+            }
+
+            let print_ref_handler_index = function(handler_index) {
+                if (flpdata.GlobalHandlersIndexes[handler_index]) {
+                    return print_ref_handler(flpdata.GlobalHandlersIndexes[handler_index]);
+                } else {
+                    return "%bad handler index " + handler_index + "%";
+                }
+            }
+
+            let $data_table = $("<table>");
+
+            let print_script = function(script) {
+                let code = script.Decompiled;
+                let $code_element = $("<div>").text(" > click to show decompiled script < ").css('cursor', 'pointer').click(function() {
+                    $(this).empty().css('cursor', '').append(code).off('click');
+                })
+                return $code_element;
+            }
+
+            let print_data6 = function() {
+                print_data6_subtype1(obj.Sub1);
+                let $events = $("<div>");
+
+                let $events_table = $("<table>");
+                for (let i in obj.Sub2s) {
+                    let ev = obj.Sub2s[i]
+                    let $event_table = $("<table>");
+                    $event_table.append(
+                        _row(_column("Mask"), _column(ev.EventKeysMask)),
+                        _row(_column("Mask2"), _column(ev.EventUnkMask)),
+                        _row(_column("Script"), _column(print_script(ev.Script))),
+                    );
+                    $events_table.append(_row(_column("event" + i), _column($event_table)));
+                }
+                $data_table.append(_row(_column("events"), _column($events_table)));
+            }
+
+            let print_data6_subtype1 = function(obj) {
+                let $elements_table = $("<table>");
+                let $scripts_table = $("<table>");
+
+                for (let i in obj.ElementsAnimation) {
+                    let el = obj.ElementsAnimation[i];
+                    let $el = $("<div>");
+
+                    let $frames_table = $("<table>");
+                    for (let j in el.KeyFrames) {
+                        let frame = el.KeyFrames[j];
+                        let $frame = $("<table>");
+                        $frame.append(_row(_column("name"), _column(frame.Name)));
+                        $frame.append(_row(_column("frame end time"), _column(frame.WhenThisFrameEnds)));
+                        $frame.append(_row(_column("element"), _column(print_ref_handler(frame.ElementHandler))));
+                        $frame.append(_row(_column("color"), _column(print_ref_handler({
+                            TypeArrayId: 10,
+                            IdInThatTypeArray: frame.ColorId
+                        }))));
+                        $frame.append(_row(_column("transformation"), _column(print_ref_handler({
+                            TypeArrayId: 9,
+                            IdInThatTypeArray: frame.TransformationId
+                        }))));
+
+                        $frames_table.append(_row(_column("frame " + j), _column($frame)));
+                    }
+                    $el.append($frames_table);
+
+                    $elements_table.append(_row(_column("element " + i), _column($el)));
+                }
+
+                for (let i in obj.FrameScriptLables) {
+                    let script = obj.FrameScriptLables[i];
+                    let $script = $("<div>");
+
+                    $script.append(_row(_column("triggered after frame"), _column(script.TriggerFrameNumber)));
+                    $script.append(_row(_column("name"), _column(script.LabelName)));
+                    let $streams_table = $("<table>");
+                    for (let iStream in script.Subs) {
+                        $streams_table.append(_row(_column(print_script(script.Subs[iStream].Script))));
+                    }
+                    $script.append(_row(_column("threads"), _column($streams_table)));
+
+                    $scripts_table.append(_row(_column("script " + i), _column($script)));
+                }
+
+                $data_table.append(_row(_column("elements"), _column($elements_table)), _row(_column("methods"), _column($scripts_table)));
+            }
+
+            let print_mesh = function(obj) {
+                $data_table.append(_row(_column("Mesh part index "),
+                    _column("<b>" + obj.MeshPartIndex + "</b><br><sub>You can open related MDL_%flpname% resource and check this object part (mesh that index starts with o_" + obj.MeshPartIndex + "_g0_...) </sub>")));
+                let $materials = [];
+                for (let i in obj.Materials) {
+                    console.log(obj.Materials, obj, flp);
+                    let mat = obj.Materials[i];
+                    let $mat = $("<div>");
+                    $mat.append("Color: <b>0x" + mat.Color.toString(16) + "</b><br>");
+                    $mat.append("Texture name: <b>" + mat.TextureName + "</b><br>");
+                    if (mat.TextureName != "") {
+                        $mat.append($('<img>').addClass('no-interpolate').attr('src', 'data:image/png;base64,' + flp.Textures[mat.TextureName].Images[0].Image));
+                    }
+                    $materials.push(_row(_column("material " + i), _column($mat)));
+                }
+                $data_table.append($materials);
+            }
+
+            let print_transform = function(obj) {
+                let $form = $("<div>");
+                $data_table.append(_row(_column("Offset X"), _column($("<input id='x' type='text'>").val(obj.OffsetX))));
+                $data_table.append(_row(_column("Offset Y"), _column($("<input id='y' type='text'>").val(obj.OffsetY))));
+                let $matrix = $("<textarea id='matrix'>").css('height', '8em').val(JSON.stringify(obj.Matrix, null, ' '));
+                $matrix.append("<sub>You can read about 2d matrices <a href='https://en.wikipedia.org/wiki/Transformation_matrix#Examples_in_2D_computer_graphics'>there</a></sub>")
+                $data_table.append(_row(_column("Matrix"), _column($matrix)));
+                let $submit = $("<button>").text("Update resource").click(function() {
+                    $table = $(this).parent().parent().parent();
+                    let newTransform = {
+                        OffsetX: Number.parseFloat($table.find("#x").val()),
+                        OffsetY: Number.parseFloat($table.find("#y").val()),
+                        Matrix: JSON.parse($table.find("#matrix").val()),
+                    };
+                    $.post({
+                        url: getActionLinkForWadNode(wad, tagid, 'transform'),
+                        data: {
+                            'id': h.IdInThatTypeArray,
+                            'data': JSON.stringify(newTransform),
+                        },
+                        success: function(a) {
+                            if (a != "" && a.error) {
+                                alert('Error uploading: ' + a.error);
+                            } else {
+                                flpdata.Transformations[h.IdInThatTypeArray] = newTransform;
+                                alert('Success!');
+                            }
+                        }
+                    });
+                })
+                let warning = ("<sub>You can miss changes in web interface, but they must appear on disk</sub>")
+                $data_table.append(_row(_column(), _column($submit, warning)));
+            }
+
+            switch (h.TypeArrayId) {
+                default: $data_table.append(JSON.stringify(obj));
                 break;
+                case 1:
+                        print_mesh(obj);
+                    break;
+                case 4:
+                        $data_table.append(print_static_label_as_tr(h.IdInThatTypeArray), false);
+                    break;
+                case 6:
+                        print_data6(obj);
+                    break;
+                case 7:
+                        print_data6_subtype1(obj);
+                    break;
+                case 8:
+                        print_data6_subtype1(obj);
+                    break;
+                case 9:
+                        print_transform(obj);
+                    break;
             }
-            asString += String.fromCharCode(c);
-        }
 
-        let s = "int32: " + view.getInt32(0, true) + " uint32: " + view.getUint32(0, true) +
-            " float: " + view.getFloat32(0, true) +
-            "</br>string: " + asString +
-            "</br>hex: " + bytesToHexString(bytes);
-        return s;
-    }
+            let get_parents = function(child_h) {
+                let parents = [];
+                if (child_h.TypeArrayId == 8) {
+                    return parents;
+                }
+                let check_parenting = function(parent, h) {
+                    if (h.IdInThatTypeArray == child_h.IdInThatTypeArray && h.TypeArrayId == child_h.TypeArrayId) {
+                        let already = false;
+                        for (let i in parents) {
+                            if (parent.IdInThatTypeArray == parents[i].IdInThatTypeArray && parent.TypeArrayId == parents[i].TypeArrayId) {
+                                already = true;
+                            }
+                        }
+                        if (!already) {
+                            parents.push(parent);
+                        }
+                    }
+                }
+                let parse_parenting_data6_sub1 = function(h, o) {
+                    for (let anim of o.ElementsAnimation) {
+                        for (let frame of anim.KeyFrames) {
+                            check_parenting(h, frame.ElementHandler);
+                            check_parenting(h, {
+                                TypeArrayId: 9,
+                                IdInThatTypeArray: frame.TransformationId
+                            });
+                            check_parenting(h, {
+                                TypeArrayId: 10,
+                                IdInThatTypeArray: frame.ColorId
+                            });
+                        }
+                    }
+                }
+                for (let h of flpdata.GlobalHandlersIndexes) {
+                    let o = get_obj_by_handler(h);
 
-    let directoryToTable;
-    directoryToTable = function(directory) {
-        let table = $("<table>");
+                    switch (h.TypeArrayId) {
+                        case 4:
+                            for (let rc of o.RenderCommandsList) {
+                                if (rc.Flags & 8 != 0) {
+                                    check_parenting(h, {
+                                        TypeArrayId: 3,
+                                        IdInThatTypeArray: rc.FontHandler
+                                    });
+                                }
+                            }
+                            break;
+                        case 5:
+                            check_parenting(h, o.FontHandler);
+                            break;
+                        case 6:
+                            parse_parenting_data6_sub1(h, o.Sub1);
+                            break;
+                        case 7:
+                            parse_parenting_data6_sub1(h, o);
+                            break;
+                        case 8:
+                            parse_parenting_data6_sub1(h, o);
+                            break;
+                    }
+                }
+                parse_parenting_data6_sub1({
+                    TypeArrayId: 8,
+                    IdInThatTypeArray: 0
+                }, flpdata.Data8);
+                return parents;
+            }
 
-        // console.log(directory);
-        if (directory.Fields) {
-            for (let subdir of directory.Fields) {
-                if (subdir.Value) {
-                    table.append($("<tr>").append(
-                        $("<td>").append(subdir.Name),
-                        $("<td>").append(valueView(subdir.Value))
-                    ));
-                } else {
-                    table.append($("<tr>").append(
-                        $("<td style='vertical-align: top;'>").append(subdir.Name),
-                        $("<td>").append(directoryToTable(subdir))
-                    ));
+            console.log(obj);
+            let $table = $("<table>");
+
+            let $header = $("<span>").text(" Viewing object " + objNamesArray[h.TypeArrayId] + "[" + h.IdInThatTypeArray + "]");
+
+            let parents_list = [];
+            let parents = get_parents(h);
+            let curParentRow = _row();
+            let colums_cnt = 6;
+            for (let i in parents) {
+                if (i != 0 && (i % colums_cnt == 0)) {
+                    parents_list.push(curParentRow);
+                    curParentRow = _row().attr('colspan', colums_cnt);
+                }
+                curParentRow.append(_column(print_ref_handler(parents[i])));
+            }
+            if (parents.length < colums_cnt || (parents.length % colums_cnt != 0)) {
+                parents_list.push(curParentRow);
+            }
+
+            console.log("parents", parents_list, parents);
+            $table.append(_row(_column($header).attr('colspan', colums_cnt + 1)));
+            if (parents.length != 0) {
+                $table.append(_row(_column("parents").attr('rowspan', parents_list.length + 1)), parents_list);
+            } else {
+                $table.append(_row(_column("parents"), _column("no parents found")));
+            }
+
+            if (h.TypeArrayId != 8) {
+                let $nav_row = _row();
+                let arr = get_obj_arr_by_id(h.TypeArrayId);
+                if (h.IdInThatTypeArray > 0 || h.IdInThatTypeArray + 1 < arr.length) {
+                    if (h.IdInThatTypeArray > 0) {
+                        $nav_row.append(_column("Prev:"));
+                        $nav_row.append(_column(print_ref_handler({
+                            TypeArrayId: h.TypeArrayId,
+                            IdInThatTypeArray: h.IdInThatTypeArray - 1,
+                        })));
+                    }
+                    if (h.IdInThatTypeArray + 1 < arr.length) {
+                        $nav_row.append(_column("Next:"));
+                        $nav_row.append(_column(print_ref_handler({
+                            TypeArrayId: h.TypeArrayId,
+                            IdInThatTypeArray: h.IdInThatTypeArray + 1,
+                        })));
+                    }
+                    $table.append(_row(_column("nav"), _column($("<table>").append($nav_row))));
                 }
             }
+
+            $table.append(_row(_column($data_table).attr('colspan', colums_cnt + 1)));
+            $data_element.append($table);
+            $('#view-summary .view-item-container').animate({
+                scrollTop: 0
+            }, 200);
+        }
+        dataSummary.append($history_element, $data_element);
+        element_view();
+    }
+
+    let flp_view_font = function() {
+        gr_instance.cleanup();
+        set3dVisible(true);
+        gr_instance.setInterfaceCameraMode(true);
+        dataSummary.empty();
+
+        let importBMFontScale = $('<input id="importbmfontscale" type="number" min="0" max="20" value="1" step="0.1">');
+        let importBMFontInput = $('<button>');
+        importBMFontInput.text('Import glyphs from BMFont file');
+        importBMFontInput.attr("href", getActionLinkForWadNode(wad, tagid, 'importbmfont')).click(function() {
+            $(this).attr('href', getActionLinkForWadNode(wad, tagid, 'importbmfont', 'scale=' + $("#importbmfontscale").val()));
+            console.log($(this).attr('href'));
+            uploadAjaxHandler.call(this);
+        });
+        let importDiv = $('<div id="flpimportfont">');
+        importDiv.append($('<label>').text('font scale').append(importBMFontScale));
+        importDiv.append(importBMFontInput);
+        importDiv.append($('<a>').text('Link to usage instruction').attr('target', '_blank')
+            .attr('href', 'https://github.com/mogaika/god_of_war_browser/blob/master/LOCALIZATION.md'));
+        dataSummary.append(importDiv);
+
+        let charstable = $("<table>");
+
+        let mdl = new grModel();
+        let matmap = {};
+
+        for (let iFont in flpdata.Fonts) {
+            let font = flpdata.Fonts[iFont];
+            for (let iChar in font.CharNumberToSymbolIdMap) {
+                if (font.CharNumberToSymbolIdMap[iChar] == -1) {
+                    continue;
+                }
+
+                let glyphId = font.CharNumberToSymbolIdMap[iChar];
+                if (glyphId >= font.CharsCount) {
+                    continue;
+                }
+
+                let chrdata = font.MeshesRefs[glyphId];
+
+                let meshes = [];
+                if (chrdata.MeshPartIndex !== -1) {
+                    meshes = loadMeshPartFromAjax(mdl, flp.Model.Meshes[0], chrdata.MeshPartIndex);
+                    let txrid = undefined;
+                    if (chrdata.Materials && chrdata.Materials.length !== 0 && chrdata.Materials[0].TextureName) {
+                        let txr_name = chrdata.Materials[0].TextureName;
+
+                        if (!matmap.hasOwnProperty(txr_name) &&
+                            flp.Textures.hasOwnProperty(txr_name) &&
+                            flp.Textures[txr_name].Images.length !== 0 &&
+                            flp.Textures[txr_name].Images[0].hasOwnProperty('Image')) {
+                            let img = flp.Textures[txr_name].Images[0].Image;
+
+                            let material = new grMaterial();
+
+                            let texture = new grTexture('data:image/png;base64,' + img);
+                            texture.markAsFontTexture();
+
+                            let layer = new grMaterialLayer();
+                            layer.setTextures([texture]);
+                            material.addLayer(layer);
+
+                            matmap[txr_name] = mdl.materials.length;
+                            mdl.addMaterial(material);
+                        }
+                        txrid = matmap[txr_name];
+                    }
+                    for (let iMesh in meshes) {
+                        meshes[iMesh].setMaterialID(txrid);
+                    }
+                }
+
+                let symbolWidth = font.SymbolWidths[glyphId];
+                let cubemesh = grHelper_CubeLines(symbolWidth / 32, 0, 0, symbolWidth / 32, 500, 5, false);
+                mdl.addMesh(cubemesh);
+                meshes.push(cubemesh);
+
+                let char = String.fromCharCode(iChar);
+                if (flp.FontCharAliases) {
+                    let map_chars = Object.keys(flp.FontCharAliases).filter(function(charUnicode) {
+                        return flp.FontCharAliases[charUnicode] == iChar
+                    });
+                    if (map_chars && map_chars.length !== 0) {
+                        char = String.fromCharCode(map_chars[0]);
+                    }
+                }
+
+                let table = $("<table>");
+
+                let tr1 = $("<tr>");
+                let tr2 = $("<tr>");
+                tr1.append($("<td>").text('#' + glyphId));
+                tr1.append($("<td>").text('width ' + symbolWidth));
+                tr1.append($("<td>").text('ansii ' + iChar));
+                tr2.append($("<td>").append($("<h2>").text(char)));
+                tr2.append($("<td>").text('mesh pt ' + chrdata.MeshPartIndex));
+
+                table.mouseenter([mdl, meshes], function(ev) {
+                    ev.data[0].showExclusiveMeshes(ev.data[1]);
+                    gr_instance.flushScene();
+                    gr_instance.requestRedraw();
+                });
+
+                charstable.append($("<tr>").append(table.append(tr1).append(tr2)));
+            }
         }
 
-        return table;
-    };
-
-    dataSummary.append(directoryToTable(twk.Tree));
-    console.log(twk);
-}
-
-function hexStringToBytes(string) {
-    var bytes = new Uint8Array(Math.ceil(string.length / 2));
-    for (var i = 0; i < bytes.length; i++) bytes[i] = parseInt(string.substr(i * 2, 2), 16);
-    return bytes;
-}
-
-function bytesToHexString(bytes) {
-    var string = '';
-    for (var i = 0; i < bytes.length; i++) {
-        if (bytes[i] < 16) string += '0';
-        string += bytes[i].toString(16);
+        dataSummary.append(charstable);
+        gr_instance.models.push(mdl);
+        gr_instance.requestRedraw();
     }
-    return string;
+
+    dataSummarySelectors.append($('<div class="item-selector">').click(flp_list_labels).text("Labels editor"));
+    dataSummarySelectors.append($('<div class="item-selector">').click(flp_print_dump).text("Dump"));
+    dataSummarySelectors.append($('<div class="item-selector">').click(flp_scripts_strings).text("Scripts strings"));
+    dataSummarySelectors.append($('<div class="item-selector">').click(flp_view_font).text("Font viewer"));
+    dataSummarySelectors.append($('<div class="item-selector">').click(flp_view_object_viewer).text("Obj viewer"));
+
+    // flp_list_labels();
+    flp_view_object_viewer();
+}
+
+/* ========================================================================== */
+/* Pro WAD summary helpers                                                      */
+/* ========================================================================== */
+function gowProSummarizeResource(data) {
+    var stats = [];
+    if (!data) return stats;
+    if (data.Data && data.Data.Joints) stats.push('joints: ' + data.Data.Joints.length);
+    if (data.Model && data.Model.Meshes) stats.push('meshes: ' + data.Model.Meshes.length);
+    if (data.Collision && data.Collision.length) stats.push('collision: ' + data.Collision.length);
+    if (data.Instances) stats.push('instances: ' + data.Instances.length);
+    if (data.Objects) stats.push('objects: ' + Object.keys(data.Objects).length);
+    return stats;
+}
+
+function gowProAddSummaryHeader(title, data) {
+    if (!dataSummary || !dataSummary.length) return;
+    var stats = gowProSummarizeResource(data);
+    if (!stats.length) return;
+    var $card = $('<div class="gow-editor-card">').append($('<b>').text(title || 'Resource summary'));
+    stats.forEach(function(s){ $card.append($('<span class="gow-pro-pill active" style="margin-left:6px">').text(s)); });
+    dataSummary.prepend($card);
 }

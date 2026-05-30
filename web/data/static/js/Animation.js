@@ -2,54 +2,51 @@
 
 let ga_instance;
 
-class AnimationManager {
-    constructor() {
-        this.lastUpdateTime = window.performance.now() / 1000.0;
-        this.active = true;
-        this.matLayerAnimations = [];
-        this.matSheetAnimations = [];
-        this.objSkeletAnimations = [];
+function gaAnimationManager() {
+    this.lastUpdateTime = window.performance.now() / 1000.0;
+    this.matLayerAnimations = [];
+    this.matSheetAnimations = [];
+    this.objSkeletAnimations = [];
+};
+
+gaAnimationManager.prototype.update = function() {
+    let currentTime = window.performance.now() / 1000.0;
+    let dt = currentTime - this.lastUpdateTime;
+
+    for (let i in this.matLayerAnimations) {
+        this.matLayerAnimations[i].update(dt, currentTime);
+    }
+    for (let i in this.matSheetAnimations) {
+        this.matSheetAnimations[i].update(dt, currentTime);
+    }
+    for (let i in this.objSkeletAnimations) {
+        this.objSkeletAnimations[i].update(dt, currentTime);
     }
 
-    update() {
-        let currentTime = window.performance.now() / 1000.0;
-        let dt = currentTime - this.lastUpdateTime;
+    this.lastUpdateTime = currentTime;
+}
 
-        if (this.active) {
-            for (let i in this.matLayerAnimations) {
-                this.matLayerAnimations[i].update(dt);
-            }
-            for (let i in this.matSheetAnimations) {
-                this.matSheetAnimations[i].update(dt);
-            }
-            for (let i in this.objSkeletAnimations) {
-                this.objSkeletAnimations[i].update(dt);
-            }
-        }
-
-        this.lastUpdateTime = currentTime;
+gaAnimationManager.prototype.addAnimation = function(anim) {
+    switch (anim.type) {
+        case 0:
+            this.objSkeletAnimations.push(anim);
+            break;
+        case 8:
+            this.matLayerAnimations.push(anim);
+            break;
+        case 9:
+            this.matSheetAnimations.push(anim);
+            break;
+        default:
+            console.error("Unknown animation type ", anim);
+            break;
     }
+}
 
-    addAnimation(anim) {
-        switch (anim.type) {
-            case 0:
-                this.objSkeletAnimations.push(anim);
-                break;
-            case 8:
-                this.matLayerAnimations.push(anim);
-                break;
-            case 9:
-                this.matSheetAnimations.push(anim);
-                break;
-            default:
-                console.error("Unknown animation type ", anim);
-                break;
-        }
-    }
-
-    freeAnimation(anim) {
-        switch (anim.type) {
-            case 0: {
+gaAnimationManager.prototype.freeAnimation = function(anim) {
+    switch (anim.type) {
+        case 0:
+            {
                 let id = this.objSkeletAnimations.indexOf(anim);
                 if (id >= 0) {
                     let a = this.objSkeletAnimations.splice(id, 1)[0];
@@ -59,407 +56,457 @@ class AnimationManager {
                 }
             }
             break;
-        case 8: {
-            let id = this.matLayerAnimations.indexOf(anim);
-            if (id >= 0) {
-                this.matLayerAnimations.splice(id, 1);
+        case 8:
+            {
+                let id = this.matLayerAnimations.indexOf(anim);
+                if (id >= 0) {
+                    this.matLayerAnimations.splice(id, 1);
+                }
             }
-        }
-        break;
-        case 9: {
-            let id = this.matSheetAnimations.indexOf(anim);
-            if (id >= 0) {
-                this.matSheetAnimations.splice(id, 1);
+            break;
+        case 9:
+            {
+                let id = this.matSheetAnimations.indexOf(anim);
+                if (id >= 0) {
+                    this.matSheetAnimations.splice(id, 1);
+                }
             }
-        }
-        break;
+            break;
         default:
             console.error("Unknown animation type ", anim);
             break;
-        }
-    }
-};
-
-class AnimationBase extends Claimable {
-    _free() {
-        ga_instance.freeAnimation(this);
-        super._free();
     }
 }
 
-class AnimationMatertialLayer extends AnimationBase {
-    constructor(anim, act, stateIndex, material) {
-        super();
-        this.type = 8;
-        this.enabled = false;
-        this.anim = anim;
-        this.act = act;
-        this.stateIndex = stateIndex;
-        this.material = material;
-        this.time = 0.0;
-        material.anims.push(this);
+function gaMatertialLayerAnimation(anim, act, stateIndex, material) {
+    this.type = 8;
+    this.enabled = true;
+    this.anim = anim;
+    this.act = act;
+    this.stateIndex = stateIndex;
+    this.material = material;
+    this.time = 0.0;
+    material.anims.push(this);
+}
+
+gaMatertialLayerAnimation.prototype.update = function(dt, currentTime) {
+    let newTime = this.time + dt;
+    if (!this.enabled) {
+        return;
     }
 
-    update(dt) {
-        let newTime = this.time + dt;
-        if (!this.enabled) {
-            return;
+    let stateDesc = this.act.StateDescrs[this.stateIndex];
+    let dataType = this.anim.DataTypes[this.stateIndex];
+
+    if (dataType.TypeId == 8) {
+        let layer = this.material.layers[dataType.Param1 & 0x7f];
+
+        for (let iData in stateDesc.Data) {
+            let data = stateDesc.Data[iData];
+
+            let floatStep = newTime / stateDesc.FrameTime;
+
+            let step = Math.trunc(floatStep) % (data.Stream.Manager.Count - 1);
+            let nextStep = (step + 1) % data.Stream.Manager.Count;
+
+            let blendFactor2 = floatStep - Math.floor(floatStep);
+            let blendFactor1 = (1 - blendFactor2);
+
+            for (let key in data.Stream.Samples) {
+                let stream = data.Stream.Samples[key];
+                layer.uvoffset[key] = stream[step] * blendFactor1 + stream[nextStep] * blendFactor2;
+            }
         }
 
-        let stateDesc = this.act.StateDescrs[this.stateIndex];
-        let dataType = this.anim.DataTypes[this.stateIndex];
+        gr_instance.requireRedraw = true;
+    } else {
+        log.error("incorrect animation typeid");
+    }
 
-        if (dataType.TypeId == 8) {
-            let layer = this.material.layers.get(dataType.Param1 & 0x7f);
+    this.time = newTime;
+}
 
-            for (let iData in stateDesc.Data) {
-                let data = stateDesc.Data[iData];
+gaMatertialLayerAnimation.prototype.enable = function(enable) {
+    this.enabled = (enable === undefined) || (!!enable);
+}
 
-                let floatStep = newTime / stateDesc.FrameTime;
+function gaObjSkeletAnimation(anim, act, stateIndex, obj, mdl) {
+    this.type = 0;
+    this.anim = anim;
+    this.stateIndex = stateIndex;
+    this.act = act;
+    this.object = obj;
+    this.time = 0;
+    this.enabled = true;
 
-                let step = Math.trunc(floatStep) % (data.Stream.Manager.Count - 1);
-                let nextStep = (step + 1) % data.Stream.Manager.Count;
+    this.jointLocalScale = Array(obj.Joints.length);
+    this.jointLocalPos = Array(obj.Joints.length);
+    this.jointLocalRots = Array(obj.Joints.length);
+    this.jointLocalMatrices = Array(obj.Joints.length);
+    this.jointGlobalMatrices = Array(obj.Joints.length);
 
-                let blendFactor2 = floatStep - Math.floor(floatStep);
-                let blendFactor1 = (1 - blendFactor2);
+    if (mdl.animation != undefined) {
+        ga_instance.freeAnimation(mdl.animation);
+    }
 
-                for (let key in data.Stream.Samples) {
-                    let stream = data.Stream.Samples[key];
-                    layer.uvoffset[key] = stream[step] * blendFactor1 + stream[nextStep] * blendFactor2;
+    this.mdl = mdl;
+    mdl.animation = this;
+    this.reset();
+    this.recalcMatrices();
+}
+
+gaObjSkeletAnimation.prototype.recalcMatrices = function() {
+    let obj = this.object;
+    let mdl = this.mdl;
+
+    for (let i = 0; i < obj.Joints.length; i++) {
+        let joint = obj.Joints[i];
+
+        const convv = 1.0 / (1 << 14);
+
+        let localQ;
+        if ((joint.Flags & 0x8000) != 0) {
+            localQ = vec4.scale(vec4.create(), this.jointLocalRots[i], convv);
+            localQ = quat.normalize(localQ, localQ);
+        } else {
+            let localE = vec4.scale(vec4.create(), this.jointLocalRots[i], convv * 360.0);
+            localQ = quat.fromEuler(quat.create(), localE[0], localE[1], localE[2]);
+        }
+
+        let local = this.jointLocalMatrices[i];
+        local = mat4.fromRotationTranslationScale(local, localQ, this.jointLocalPos[i], this.jointLocalScale[i]);
+
+        //console.log(i, "o", quat.str(vec4.scale(vec4.create(), this.jointLocalRots[i], convv)));
+        //console.log(i, "n", quat.str(quat.normalize(quat.create(), vec4.scale(vec4.create(), this.jointLocalRots[i], convv))));
+        //console.log(i, "r", quat.str(mat4.getRotation(quat.create(), local)));
+        //console.log(i, "strage shit", !!(joint.Flags & 0x8000), joint.Flags, this.jointLocalPos[i],  this.jointLocalScale[i]);
+
+        this.jointLocalMatrices[i] = local;
+
+        let global = (joint.Parent >= 0) ? mat4.mul(this.jointGlobalMatrices[i], this.jointGlobalMatrices[joint.Parent], local) : local;
+        this.jointGlobalMatrices[i] = global;
+
+        let result = global;
+        if ((joint.Flags & 0x8) != 0) {
+            //mat4.mul(result, obj.Matrixes2[joint.ExternalId], result);
+            console.warn("joint flags 0x8: ", joint.Name, joint);
+            result = mat4.mul(result, result, obj.Matrixes2[joint.ExternalId]);
+        }
+
+        let resultInverted = result;
+        if (joint.IsSkinned) {
+            let inverseBindMat = obj.Matrixes3[joint.InvId];
+            resultInverted = mat4.mul(mat4.create(), resultInverted, inverseBindMat);
+        }
+        mdl.setJointMatrix(i, result, resultInverted);
+    }
+}
+
+gaObjSkeletAnimation.prototype.reset = function() {
+    this.time = 0;
+    let obj = this.object;
+
+    for (let i = 0; i < obj.Joints.length; i++) {
+        this.jointLocalRots[i] = obj.Vectors5[i].slice();
+        this.jointLocalPos[i] = obj.Vectors4[i].slice();
+        this.jointLocalScale[i] = obj.Vectors6[i].slice();
+        this.jointLocalMatrices[i] = mat4.create();
+        this.jointGlobalMatrices[i] = mat4.create();
+    }
+    gr_instance.requireRedraw = true;
+}
+
+
+// return first sample index
+function animationReturnStreamData(manager, globalManager, animNextTime, frameTime) {
+    const eps = 1.0 / (1024.0 * 16.0);
+    // TODO: parse reverse animation situation if (animNextTime < animPrevTime)
+
+    let globalFramesCount = globalManager.Count + globalManager.Offset + globalManager.DatasCount3 - 1;
+    let animFrameTime = animNextTime / frameTime;
+    if ((animFrameTime + eps) > globalFramesCount ||
+        (animFrameTime - eps) < manager.Offset) {
+        return undefined;
+    }
+
+    let streamSampleIdx = animFrameTime - manager.Offset;
+    if (streamSampleIdx >= manager.Count + manager.DatasCount3) {
+        return undefined;
+    } else if (streamSampleIdx > manager.Count - 1) {
+        return manager.Count - 1;
+    } else if (streamSampleIdx < 0) {
+        return 0;
+    } else {
+        return streamSampleIdx;
+    }
+}
+
+function animationHandleRotationStream(stream, globalManager, prevTime, newTime, frameTime, jointLocalRots, l = false) {
+    const eps = 1.0 / (1024.0 * 16.0);
+    // TODO: parse reverse animation situation if (animNextTime < animPrevTime)
+
+    let newSamplePos = animationReturnStreamData(stream.Manager, globalManager, newTime, frameTime);
+    if (newSamplePos === undefined) {
+        return false;
+    }
+    let newSampleIndex = Math.floor(newSamplePos);
+    let newSampleOffset = newSamplePos - newSampleIndex;
+
+    let changed = false;
+
+    //console.info(newSamplePos, stream.Samples.hasOwnProperty(-100));
+    if (stream.Samples.hasOwnProperty(-100)) {
+        // additive change
+        let newValueMultiplyer = newSampleOffset; // by default add as much as we shoul
+
+        let prevValueMultiplyer, prevSampleIndex;
+        let prevSampleOffset;
+        let prevSamplePos = animationReturnStreamData(stream.Manager, globalManager, prevTime, frameTime);
+        if (prevSamplePos !== undefined) {
+            // if not first frame in batch
+            prevSampleIndex = Math.floor(prevSamplePos);
+            prevSampleOffset = prevSamplePos - prevSampleIndex;
+            if (prevSampleIndex == newSampleIndex) {
+                // we in the same sample, compensate prev time this sample was played
+                newValueMultiplyer -= prevSampleOffset;
+            } else {
+                // we need to done prev sample addition first
+                prevValueMultiplyer = 1 - prevSampleOffset;
+                if (prevValueMultiplyer < eps) {
+                    prevValueMultiplyer = undefined;
                 }
             }
-
-            gr_instance.requireRedraw = true;
-        } else {
-            log.error("incorrect animation typeid");
         }
 
-        this.time = newTime;
-    }
+        for (let iStream in stream.Samples) {
+            if (iStream < 0) {
+                continue;
+            }
+            changed = true;
+            let jointId = parseInt(iStream / 4);
+            let coord = parseInt(iStream) % 4;
 
-    enable(enable = true) {
-        this.enabled = !!enable;
-    }
-}
+            let value = jointLocalRots[jointId][coord];
+            let prevSampleValue;
 
-class AnimationObjectSkelet extends AnimationBase {
-    constructor(anim, act, stateIndex, obj, treeNode) {
-        super();
-        this.type = 0;
-        this.anim = anim;
-        this.stateIndex = stateIndex;
-        this.act = act;
-        this.object = obj;
-        this.time = 0;
-        this.enabled = true;
-
-        this.jointLocalScale = Array(obj.Joints.length);
-        this.jointLocalPos = Array(obj.Joints.length);
-        this.jointLocalRots = Array(obj.Joints.length);
-        this.jointLocalMatrices = Array(obj.Joints.length);
-        this.jointGlobalMatrices = Array(obj.Joints.length);
-
-        treeNode.assignAnimation(this);
-        this.treeNode = treeNode;
-
-        this.reset();
-        this.recalcMatrices();
-    }
-
-    recalcMatrices() {
-        const obj = this.object;
-        const treeNode = this.treeNode;
-
-        for (let i = 0; i < obj.Joints.length; i++) {
-            let joint = obj.Joints[i];
-
-            const convv = 1.0 / (1 << 14);
-
-            let localQ;
-            if ((joint.Flags & 0x8000) != 0) {
-                localQ = vec4.scale(vec4.create(), this.jointLocalRots[i], convv);
-                localQ = quat.normalize(localQ, localQ);
-            } else {
-                let localE = vec4.scale(vec4.create(), this.jointLocalRots[i], convv * 360.0);
-                localQ = quat.fromEuler(quat.create(), localE[0], localE[1], localE[2]);
+            if (prevValueMultiplyer !== undefined) {
+                prevSampleValue = stream.Samples[iStream][prevSampleIndex];
+                value += prevSampleValue * prevValueMultiplyer;
             }
 
-            let local = this.jointLocalMatrices[i];
-            local = mat4.fromRotationTranslationScale(local, localQ, this.jointLocalPos[i], this.jointLocalScale[i]);
+            // TODO: add cycle that will add missed samples values (fast forward case)
+            let newSampleValue = stream.Samples[iStream][newSampleIndex];
+            value += newSampleValue * newValueMultiplyer;
 
-            //console.log(i, "o", quat.str(vec4.scale(vec4.create(), this.jointLocalRots[i], convv)));
-            //console.log(i, "n", quat.str(quat.normalize(quat.create(), vec4.scale(vec4.create(), this.jointLocalRots[i], convv))));
-            //console.log(i, "r", quat.str(mat4.getRotation(quat.create(), local)));
-            //console.log(i, "strage shit", !!(joint.Flags & 0x8000), joint.Flags, this.jointLocalPos[i],  this.jointLocalScale[i]);
+            let prevVal = jointLocalRots[jointId][coord];
+            jointLocalRots[jointId][coord] = value;
 
-            this.jointLocalMatrices[i] = local;
-
-            //let global = (joint.Parent >= 0) ? mat4.mul(this.jointGlobalMatrices[i], this.jointGlobalMatrices[joint.Parent], local) : local;
-            //this.jointGlobalMatrices[i] = global;
-
-            //let result = global;
-            //if ((joint.Flags & 0x8) != 0) {
-            // mat4.mul(result, obj.Matrixes2[joint.ExternalId], result);
-            // console.warn("joint flags 0x8: ", joint.Name, joint);
-            // console.log(joint.Name, obj.Matrixes2[joint.ExternalId]);
-            // result = mat4.mul(result, result, obj.Matrixes2[joint.ExternalId]);
-            //}
-
-            //let resultInverted = result;
-            //if (joint.IsSkinned) {
-            //    let inverseBindMat = obj.Matrixes3[joint.InvId];
-            //    resultInverted = mat4.mul(mat4.create(), result, inverseBindMat);
-            //}
-            treeNode.joints[i].setLocalMatrixWithoutUpdate(local);
+            //if (!l) jointLocalRots[jointId][coord] = value;
+            //if (l) console.log("add", prevVal, coord, value);
         }
+    } else {
+        // exact change
+        let nextSampleIndex = newSampleIndex + 1;
+        for (let iStream in stream.Samples) {
+            changed = true;
+            let jointId = parseInt(iStream / 4);
+            let coord = parseInt(iStream) % 4;
 
-        treeNode.update();
-    }
-
-    reset() {
-        this.time = 0;
-        let obj = this.object;
-
-        for (let i = 0; i < obj.Joints.length; i++) {
-            this.jointLocalRots[i] = obj.Vectors5[i].slice();
-            this.jointLocalPos[i] = obj.Vectors4[i].slice();
-            this.jointLocalScale[i] = obj.Vectors6[i].slice();
-            this.jointLocalMatrices[i] = mat4.create();
-            this.jointGlobalMatrices[i] = mat4.create();
-        }
-        gr_instance.requireRedraw = true;
-    }
-
-    // return first sample index
-    returnStreamDataIndex(manager, globalManager, animNextTime, frameTime) {
-        const eps = 1.0 / (1024.0 * 16.0);
-        // TODO: parse reverse animation situation if (animNextTime < animPrevTime)
-
-        let globalFramesCount = globalManager.Count + globalManager.Offset + globalManager.DatasCount3 - 1;
-        let animFrame = animNextTime / frameTime;
-        if ((animFrame + eps) > globalFramesCount ||
-            (animFrame - eps) < manager.Offset) {
-            return undefined;
-        }
-
-        let streamSampleIdx = animFrame - manager.Offset;
-        if (streamSampleIdx >= manager.Count + manager.DatasCount3) {
-            return undefined;
-        } else if (streamSampleIdx > manager.Count - 1) {
-            return manager.Count - 1;
-        } else if (streamSampleIdx < 0) {
-            return 0;
-        } else {
-            return streamSampleIdx;
+            let newSampleValue = stream.Samples[iStream][newSampleIndex];
+            let value;
+            if (newSampleOffset < eps) {
+                value = newSampleValue;
+            } else {
+                let nextSampleValue = stream.Samples[iStream][nextSampleIndex];
+                value = newSampleValue + (nextSampleValue - newSampleValue) * newSampleOffset;
+            }
+            let prevVal = jointLocalRots[jointId][coord];
+            jointLocalRots[jointId][coord] = value;
+            //if (l) { console.log("raw", prevVal, coord); }
+            //console.log(jointId, coord,
+            //		"pv", prevVal, "nv", value, "rnv", jointLocalRots[jointId][coord]);	
         }
     }
+    return changed;
+}
 
-    handleSkinningStream(stream, globalManager, prevTime, newTime, frameTime, jointLocalRots, l = false) {
-        const eps = 1.0 / (1024.0 * 16.0);
-        // TODO: parse reverse animation situation if (animNextTime < animPrevTime)
+gaObjSkeletAnimation.prototype.update = function(dt, currentTime) {
+    let newTime = this.time + dt;
+    if (!this.enabled) {
+        return;
+    }
 
-        let newSamplePos = this.returnStreamDataIndex(stream.Manager, globalManager, newTime, frameTime);
-        if (newSamplePos === undefined) {
-            return false;
-        }
-        let newSampleIndex = Math.floor(newSamplePos);
-        let newSampleOffset = newSamplePos - newSampleIndex;
+    let stateDesc = this.act.StateDescrs[this.stateIndex];
+    let dataType = this.anim.DataTypes[this.stateIndex];
 
+    let statAnimRotRaw = 0;
+    let statAnimRotAdd = 0;
+    let statAnimRotRough = 0;
+    let statAnimPosRaw = 0;
+
+    if (dataType.TypeId == 0) {
+        let mdl = this.mdl;
+        let skeleton = this.object.Joints;
         let changed = false;
 
-        //console.info(newSamplePos, stream.Samples.hasOwnProperty(-100));
-        if (stream.Samples.hasOwnProperty(-100)) {
-            // additive change
-            let newValueMultiplyer = newSampleOffset; // by default add as much as we shoul
+        for (let iData in stateDesc.Data) {
+            let data = stateDesc.Data[iData];
+            let globalRotationStream = data.RotationStream;
+            let globalPositionStream = data.PositionStream;
 
-            let prevValueMultiplyer, prevSampleIndex;
-            let prevSampleOffset;
-            let prevSamplePos = this.returnStreamDataIndex(stream.Manager, globalManager, prevTime, frameTime);
-            if (prevSamplePos !== undefined) {
-                // if not first frame in batch
-                prevSampleIndex = Math.floor(prevSamplePos);
-                prevSampleOffset = prevSamplePos - prevSampleIndex;
-                if (prevSampleIndex == newSampleIndex) {
-                    // we in the same sample, compensate prev time this sample was played
-                    newValueMultiplyer -= prevSampleOffset;
-                } else {
-                    // we need to done prev sample addition first
-                    prevValueMultiplyer = 1 - prevSampleOffset;
-                    if (prevValueMultiplyer < eps) {
-                        prevValueMultiplyer = undefined;
+            if (globalRotationStream.Manager.Count) {
+                let stream = globalRotationStream;
+                if (animationHandleRotationStream(stream, stream.Manager, this.time, newTime, stateDesc.FrameTime, this.jointLocalRots)) {
+                    changed = true;
+                }
+            } else {
+                for (let iAdditiveSample in data.RotationSubStreamsAdd) {
+                    let stream = data.RotationSubStreamsAdd[iAdditiveSample];
+                    if (animationHandleRotationStream(stream, globalRotationStream.Manager, this.time, newTime, stateDesc.FrameTime, this.jointLocalRots)) {
+                        changed = true;
+                    }
+                }
+
+                for (let iRoughSample in data.RotationSubStreamsRough) {
+                    let stream = data.RotationSubStreamsRough[iRoughSample];
+                    if (animationHandleRotationStream(stream, globalRotationStream.Manager, this.time, newTime, stateDesc.FrameTime, this.jointLocalRots)) {
+                        changed = true;
                     }
                 }
             }
 
-            for (let iStream in stream.Samples) {
-                if (iStream < 0) {
-                    continue;
+            if (globalPositionStream.Manager.Count) {
+                let stream = globalPositionStream;
+                if (animationHandleRotationStream(stream, stream.Manager, this.time, newTime, stateDesc.FrameTime, this.jointLocalPos, true)) {
+                    changed = true;
                 }
-                changed = true;
-                let jointId = parseInt(iStream / 4);
-                let coord = parseInt(iStream) % 4;
-
-                let value = jointLocalRots[jointId][coord];
-                let prevSampleValue;
-
-                if (prevValueMultiplyer !== undefined) {
-                    prevSampleValue = stream.Samples[iStream][prevSampleIndex];
-                    value += prevSampleValue * prevValueMultiplyer;
+            } else {
+                for (let iAdditiveSample in data.PositionSubStreamsAdd) {
+                    let stream = data.PositionSubStreamsAdd[iAdditiveSample];
+                    if (animationHandleRotationStream(stream, globalPositionStream.Manager, this.time, newTime, stateDesc.FrameTime, this.jointLocalPos, true)) {
+                        changed = true;
+                    }
                 }
 
-                // TODO: add cycle that will add missed samples values (fast forward case)
-                let newSampleValue = stream.Samples[iStream][newSampleIndex];
-                value += newSampleValue * newValueMultiplyer;
-
-                let prevVal = jointLocalRots[jointId][coord];
-                jointLocalRots[jointId][coord] = value;
-
-                //if (!l) jointLocalRots[jointId][coord] = value;
-                //if (l) console.log("add", prevVal, coord, value);
-            }
-        } else {
-            // exact change
-            let nextSampleIndex = newSampleIndex + 1;
-            for (let iStream in stream.Samples) {
-                changed = true;
-                let jointId = parseInt(iStream / 4);
-                let coord = parseInt(iStream) % 4;
-
-                let newSampleValue = stream.Samples[iStream][newSampleIndex];
-                let value;
-                if (newSampleOffset < eps) {
-                    value = newSampleValue;
-                } else {
-                    let nextSampleValue = stream.Samples[iStream][nextSampleIndex];
-                    value = newSampleValue + (nextSampleValue - newSampleValue) * newSampleOffset;
+                for (let iRoughSample in data.PositionSubStreamsRough) {
+                    let stream = data.PositionSubStreamsRough[iRoughSample];
+                    if (animationHandleRotationStream(stream, globalPositionStream.Manager, this.time, newTime, stateDesc.FrameTime, this.jointLocalPos, true)) {
+                        changed = true;
+                    }
                 }
-                let prevVal = jointLocalRots[jointId][coord];
-                jointLocalRots[jointId][coord] = value;
-                //if (l) { console.log("raw", prevVal, coord); }
-                //console.log(jointId, coord,
-                //		"pv", prevVal, "nv", value, "rnv", jointLocalRots[jointId][coord]);	
             }
         }
-        return changed;
+        if (changed) {
+            this.recalcMatrices();
+            gr_instance.requireRedraw = true;
+        }
+    } else {
+        console.error("incorrect animation typeid");
     }
 
-    update(dt) {
-        let newTime = this.time + dt;
-        if (!this.enabled) {
-            return;
-        }
-
-        let stateDesc = this.act.StateDescrs[this.stateIndex];
-        let dataType = this.anim.DataTypes[this.stateIndex];
-
-        let statAnimRotRaw = 0;
-        let statAnimRotAdd = 0;
-        let statAnimRotRough = 0;
-        let statAnimPosRaw = 0;
-
-        if (dataType.TypeId == 0) {
-            let skeleton = this.object.Joints;
-            let changed = false;
-
-            for (let iData in stateDesc.Data) {
-                let data = stateDesc.Data[iData];
-                let globalRotationStream = data.RotationStream;
-                let globalPositionStream = data.PositionStream;
-
-                if (globalRotationStream.Manager.Count) {
-                    let stream = globalRotationStream;
-                    if (this.handleSkinningStream(stream, stream.Manager, this.time, newTime, stateDesc.FrameTime, this.jointLocalRots)) {
-                        changed = true;
-                    }
-                } else {
-                    for (let iAdditiveSample in data.RotationSubStreamsAdd) {
-                        let stream = data.RotationSubStreamsAdd[iAdditiveSample];
-                        if (this.handleSkinningStream(stream, globalRotationStream.Manager, this.time, newTime, stateDesc.FrameTime, this.jointLocalRots)) {
-                            changed = true;
-                        }
-                    }
-
-                    for (let iRoughSample in data.RotationSubStreamsRough) {
-                        let stream = data.RotationSubStreamsRough[iRoughSample];
-                        if (this.handleSkinningStream(stream, globalRotationStream.Manager, this.time, newTime, stateDesc.FrameTime, this.jointLocalRots)) {
-                            changed = true;
-                        }
-                    }
-                }
-
-                if (globalPositionStream.Manager.Count) {
-                    let stream = globalPositionStream;
-                    if (this.handleSkinningStream(stream, stream.Manager, this.time, newTime, stateDesc.FrameTime, this.jointLocalPos, true)) {
-                        changed = true;
-                    }
-                } else {
-                    for (let iAdditiveSample in data.PositionSubStreamsAdd) {
-                        let stream = data.PositionSubStreamsAdd[iAdditiveSample];
-                        if (this.handleSkinningStream(stream, globalPositionStream.Manager, this.time, newTime, stateDesc.FrameTime, this.jointLocalPos, true)) {
-                            changed = true;
-                        }
-                    }
-
-                    for (let iRoughSample in data.PositionSubStreamsRough) {
-                        let stream = data.PositionSubStreamsRough[iRoughSample];
-                        if (this.handleSkinningStream(stream, globalPositionStream.Manager, this.time, newTime, stateDesc.FrameTime, this.jointLocalPos, true)) {
-                            changed = true;
-                        }
-                    }
-                }
-            }
-            if (changed) {
-                this.recalcMatrices();
-                gr_instance.requireRedraw = true;
-            }
-        } else {
-            console.error("incorrect animation typeid");
-        }
-
-        this.time = newTime;
-        if (this.time >= this.act.Duration) {
-            this.reset();
-        }
+    this.time = newTime;
+    if (this.time >= this.act.Duration) {
+        this.reset();
     }
 }
 
-class AnimationMaterialSheet extends AnimationBase {
-    constructor(anim, act, stateIndex, material) {
-        super();
-        this.type = 9;
-        this.anim = anim;
-        this.act = act;
-        this.stateIndex = stateIndex;
-        this.material = material;
-        this.time = 0.0;
-        this.step = 0;
-        material.anims.push(this);
-    }
+function gaMatertialSheetAnimation(anim, act, stateIndex, material) {
+    this.type = 9;
+    this.anim = anim;
+    this.act = act;
+    this.stateIndex = stateIndex;
+    this.material = material;
+    this.time = 0.0;
+    this.step = 0;
+    material.anims.push(this);
+}
 
-    update(dt) {
-        var newTime = this.time + dt * 0.5;
-        var stateDesc = this.act.StateDescrs[this.stateIndex];
-        var dataType = this.anim.DataTypes[this.stateIndex];
+gaMatertialSheetAnimation.prototype.update = function(dt, currentTime) {
+    var newTime = this.time + dt * 0.5;
+    var stateDesc = this.act.StateDescrs[this.stateIndex];
+    var dataType = this.anim.DataTypes[this.stateIndex];
 
-        if (dataType.TypeId == 9) {
-            var floatStep = newTime / stateDesc.FrameTime;
-            var step = Math.trunc(floatStep) % stateDesc.Data.length;
-            if (step != this.step) {
-                gr_instance.requireRedraw = true;
-                this.material.layers.get(0).setTextureIndex(stateDesc.Data[step]);
-            }
-        } else {
-            log.error("incorrect animation typeid");
+    if (dataType.TypeId == 9) {
+        var floatStep = newTime / stateDesc.FrameTime;
+        var step = Math.trunc(floatStep) % stateDesc.Data.length;
+        if (step != this.step) {
+            gr_instance.requireRedraw = true;
+            this.material.layers[0].setTextureIndex(stateDesc.Data[step]);
         }
-
-        this.time = newTime;
+    } else {
+        log.error("incorrect animation typeid");
     }
+
+    this.time = newTime;
 }
 
 function gaInit() {
     if (ga_instance) {
-        console.warn("AnimationManager already created", ga_instance);
+        console.warn("gaAnimationManager already created", ga_instance);
         return;
     }
-    ga_instance = new AnimationManager();
+    ga_instance = new gaAnimationManager();
 }
+
+/* ========================================================================== */
+/* Pro animation playback controls                                              */
+/* ========================================================================== */
+(function() {
+    if (window.__gowProAnimationPatch) return;
+    window.__gowProAnimationPatch = true;
+
+    gaAnimationManager.prototype._updateWithDt = function(dt, currentTime) {
+        dt = dt * (this.speed === undefined ? 1.0 : this.speed);
+        for (let i in this.matLayerAnimations) this.matLayerAnimations[i].update(dt, currentTime);
+        for (let i in this.matSheetAnimations) this.matSheetAnimations[i].update(dt, currentTime);
+        for (let i in this.objSkeletAnimations) this.objSkeletAnimations[i].update(dt, currentTime);
+    };
+
+    gaAnimationManager.prototype.update = function() {
+        let currentTime = window.performance.now() / 1000.0;
+        let dt = currentTime - this.lastUpdateTime;
+        this.lastUpdateTime = currentTime;
+        if (this.paused) return;
+        this._updateWithDt(dt, currentTime);
+    };
+
+    gaAnimationManager.prototype.setSpeed = function(speed) {
+        this.speed = Math.max(0.01, Math.min(8.0, parseFloat(speed) || 1.0));
+    };
+
+    gaAnimationManager.prototype.pause = function(paused) {
+        this.paused = paused === undefined ? true : !!paused;
+    };
+
+    gaAnimationManager.prototype.step = function(seconds) {
+        seconds = seconds || (1.0 / 30.0);
+        this._updateWithDt(seconds, window.performance.now() / 1000.0);
+    };
+
+    var oldInit = gaInit;
+    gaInit = function() {
+        oldInit();
+        if (ga_instance) {
+            ga_instance.speed = (typeof gowProReadSetting === 'function') ? gowProReadSetting('animationSpeed', 1.0) : 1.0;
+            ga_instance.paused = false;
+        }
+    };
+
+    function installAnimationMiniPanel() {
+        if ($('#gow-pro-animation-panel').length || typeof ga_instance === 'undefined' || !ga_instance) return;
+        var $panel = $('<div id="gow-pro-animation-panel" class="gow-pro-toolbar">');
+        var $play = $('<span class="gow-pro-pill active">Anim</span>').on('click', function(){
+            ga_instance.paused = !ga_instance.paused;
+            $(this).toggleClass('active', !ga_instance.paused);
+        });
+        var $speed = $('<input type="range" min="0.05" max="4" step="0.05">').val(ga_instance.speed || 1.0).on('input', function(){
+            ga_instance.setSpeed(this.value);
+            localStorage.setItem('gow-pro-animationSpeed', JSON.stringify(ga_instance.speed));
+        });
+        var $step = $('<button>Step</button>').on('click', function(){ ga_instance.step(1/30); });
+        $panel.append($play, $('<span class="gow-muted">speed</span>'), $speed, $step);
+        $('#view-3d').append($panel);
+    }
+
+    $(document).ready(function(){ setTimeout(installAnimationMiniPanel, 500); });
+})();
