@@ -186,13 +186,11 @@ func parseCheck(dir vfs.Directory) {
 					continue
 				}
 
-
 				if _, err := file.GetData(); err != nil {
 					log.Printf("ERROR: Parse failed for %s: %v", fullPath, err)
 					failedFiles++
 					continue
 				}
-				
 
 			}
 		}
@@ -222,7 +220,7 @@ func setupPSARCDriver(path string) (*os.File, vfs.Directory, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("error opening PSARC: %v", err)
 	}
-	
+
 	drv, err := psarc.NewPsarcDriver(f)
 	return f, drv, err
 }
@@ -239,7 +237,7 @@ func setupISODriver(path string) (*os.File, vfs.Directory, vfs.Directory, error)
 
 	driverDir, err := iso.NewIsoDriver(f)
 	if err != nil {
-		f.Close() 
+		f.Close()
 		return nil, nil, nil, err
 	}
 
